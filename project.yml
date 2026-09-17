@@ -1,0 +1,20 @@
+name: iPhoneSensorRecorder
+
+options:
+  bundleIdPrefix: com.arvindkandari
+
+targets:
+  iPhoneSensorRecorder:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+
+    sources:
+      - path: Sources
+
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.arvindkandari.iPhoneSensorRecorder
+        INFOPLIST_KEY_NSCameraUsageDescription: "This app uses the camera to record synchronized video."
+        INFOPLIST_KEY_NSMotionUsageDescription: "This app uses motion sensors to record synchronized sensor data."
+        SWIFT_VERSION: "5.0"

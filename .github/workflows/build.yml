@@ -1,0 +1,46 @@
+name: Build iPhone App
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Build iOS app
+        run: |
+          xcodebuild \
+            -project iPhoneSensorRecorder.xcodeproj \
+            -scheme iPhoneSensorRecorder \
+            -sdk iphoneos \
+            -configuration Debug \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Package app
+        run: |
+          mkdir -p build
+          cp -R ~/Library/Developer/Xcode/DerivedData/iPhoneSensorRecorder-*/Build/Products/Debug-iphoneos/iPhoneSensorRecorder.app build/
+
+      - name: Upload app
+        uses: actions/upload-artifact@v4
+        with:
+          name: iPhoneSensorRecorder-app
+          path: build/iPhoneSensorRecorder.app

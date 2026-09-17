@@ -1,4 +1,3 @@
-```swift
 import Foundation
 import AVFoundation
 
@@ -280,4 +279,3 @@ final class RecordingSession {
         )
     }
 }
-```

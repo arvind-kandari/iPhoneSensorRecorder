@@ -24,7 +24,9 @@ jobs:
         run: xcodebuild -version
 
       - name: Build iOS app
+        continue-on-error: true
         run: |
+          set -o pipefail
           xcodebuild \
             -project iPhoneSensorRecorder.xcodeproj \
             -scheme iPhoneSensorRecorder \
@@ -32,7 +34,20 @@ jobs:
             -configuration Debug \
             -destination 'generic/platform=iOS' \
             CODE_SIGNING_ALLOWED=NO \
-            build
+            build 2>&1 | tee xcodebuild.log
+
+      - name: Upload Xcode build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcode-build-log
+          path: xcodebuild.log
+
+      - name: Fail if build failed
+        run: |
+          if grep -q "\*\* BUILD FAILED \*\*" xcodebuild.log; then
+            exit 1
+          fi
 
       - name: Package app
         run: |

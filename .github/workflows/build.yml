@@ -54,8 +54,22 @@ jobs:
           mkdir -p build
           cp -R ~/Library/Developer/Xcode/DerivedData/iPhoneSensorRecorder-*/Build/Products/Debug-iphoneos/iPhoneSensorRecorder.app build/
 
+      - name: Create unsigned IPA
+        run: |
+          mkdir -p build/Payload
+          cp -R build/iPhoneSensorRecorder.app build/Payload/
+          cd build
+          zip -r iPhoneSensorRecorder-unsigned.ipa Payload
+          rm -rf Payload
+
       - name: Upload app
         uses: actions/upload-artifact@v4
         with:
           name: iPhoneSensorRecorder-app
           path: build/iPhoneSensorRecorder.app
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: iPhoneSensorRecorder-unsigned-ipa
+          path: build/iPhoneSensorRecorder-unsigned.ipa

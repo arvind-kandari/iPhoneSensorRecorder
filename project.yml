@@ -15,6 +15,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.arvindkandari.iPhoneSensorRecorder
+        GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_NSCameraUsageDescription: "This app uses the camera to record synchronized video."
         INFOPLIST_KEY_NSMotionUsageDescription: "This app uses motion sensors to record synchronized sensor data."
         SWIFT_VERSION: "5.0"

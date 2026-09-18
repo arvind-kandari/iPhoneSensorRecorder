@@ -58,8 +58,12 @@ struct ContentView: View {
 
     private var topControls: some View {
         HStack(spacing: 14) {
-            Image(systemName: "bolt.slash.fill")
-                .foregroundStyle(.white.opacity(0.8))
+            if recordingSession.hasTorch {
+                Button(action: recordingSession.toggleTorch) {
+                    Image(systemName: recordingSession.torchIsOn ? "bolt.fill" : "bolt.slash.fill")
+                }
+                .disabled(recordingSession.state != .ready)
+            }
             Spacer()
             Button { showSettings = true } label: {
                 Text(formatText)
@@ -72,6 +76,10 @@ struct ContentView: View {
             Button { showSensorOverlay.toggle() } label: {
                 Image(systemName: showSensorOverlay ? "waveform.path.ecg" : "waveform.path.ecg.rectangle")
             }
+            Button(action: recordingSession.switchCamera) {
+                Image(systemName: "camera.rotate")
+            }
+            .disabled(recordingSession.state != .ready)
             Button { showSettings = true } label: { Image(systemName: "gearshape") }
                 .disabled(recordingSession.state == .recording || recordingSession.state == .paused)
         }

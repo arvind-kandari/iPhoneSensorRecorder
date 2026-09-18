@@ -9,6 +9,9 @@ final class RecordingSession: ObservableObject {
     @Published private(set) var elapsedTime: TimeInterval = 0
     @Published private(set) var formatOptions: [CameraFormatOption] = []
     @Published private(set) var selectedFormat: CameraFormatOption?
+    @Published private(set) var isFrontCamera = false
+    @Published private(set) var hasTorch = false
+    @Published private(set) var torchIsOn = false
 
     private let timeSynchronizer = TimeSynchronizer()
     private lazy var sensorManager = SensorManager(timeSynchronizer: timeSynchronizer)
@@ -53,6 +56,13 @@ final class RecordingSession: ObservableObject {
                 self?.selectedFormat = selected
             }
         }
+        cameraRecorder.onCameraChanged = { [weak self] isFront, hasTorch, torchIsOn in
+            DispatchQueue.main.async {
+                self?.isFrontCamera = isFront
+                self?.hasTorch = hasTorch
+                self?.torchIsOn = torchIsOn
+            }
+        }
     }
 
     func configure() {
@@ -64,6 +74,16 @@ final class RecordingSession: ObservableObject {
     func selectVideoFormat(_ option: CameraFormatOption) {
         guard state == .ready else { return }
         cameraRecorder.selectFormat(option)
+    }
+
+    func switchCamera() {
+        guard state == .ready else { return }
+        cameraRecorder.switchCamera()
+    }
+
+    func toggleTorch() {
+        guard state == .ready, hasTorch else { return }
+        cameraRecorder.toggleTorch()
     }
 
     func start() {

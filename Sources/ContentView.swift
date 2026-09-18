@@ -4,6 +4,7 @@ struct ContentView: View {
     @StateObject private var recordingSession = RecordingSession()
     @State private var sensorReading = SensorReading(recordingTime: 0, sensorTimestamp: 0, accelerationX: 0, accelerationY: 0, accelerationZ: 0, rotationRateX: 0, rotationRateY: 0, rotationRateZ: 0, magneticFieldX: 0, magneticFieldY: 0, magneticFieldZ: 0, roll: 0, pitch: 0, yaw: 0)
     @State private var showSettings = false
+    @State private var showSensorOverlay = false
 
     var body: some View {
         TabView {
@@ -28,67 +29,106 @@ struct ContentView: View {
     }
 
     private var recordView: some View {
-        VStack(spacing: 16) {
-            HStack {
-                Text(AppInfo.name).font(.title2.bold())
-                Spacer()
-                Button { showSettings = true } label: { Image(systemName: "gearshape") }
-                    .disabled(recordingSession.state == .recording || recordingSession.state == .paused)
-            }
-            .padding(.horizontal)
-
-            ZStack(alignment: .topLeading) {
+        GeometryReader { proxy in
+            ZStack {
+                Color.black
                 CameraPreview(session: recordingSession.captureSession)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                Text(statusText).font(.caption.bold()).padding(8).background(.black.opacity(0.65)).clipShape(Capsule()).padding()
-            }
-            .aspectRatio(9 / 16, contentMode: .fit)
-            .padding(.horizontal)
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .clipped()
+                LinearGradient(colors: [.black.opacity(0.65), .clear, .black.opacity(0.8)], startPoint: .top, endPoint: .bottom)
 
+                VStack(spacing: 0) {
+                    topControls
+                    Spacer()
+                    if showSensorOverlay { sensorOverlay }
+                    Spacer()
+                    if recordingSession.state == .recording || recordingSession.state == .paused {
+                        recordingBadge
+                    }
+                    cameraControls
+                        .padding(.top, 18)
+                        .padding(.bottom, 24)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 12)
+            }
+            .ignoresSafeArea(edges: .top)
+        }
+    }
+
+    private var topControls: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "bolt.slash.fill")
+                .foregroundStyle(.white.opacity(0.8))
+            Spacer()
             Button { showSettings = true } label: {
-                Text(formatText + "  ›").font(.subheadline.weight(.semibold))
+                Text(formatText)
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(.black.opacity(0.55), in: Capsule())
             }
             .disabled(recordingSession.state == .recording || recordingSession.state == .paused)
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Sensors").font(.headline)
-                    sensorSection("Accelerometer", sensorReading.accelerationX, sensorReading.accelerationY, sensorReading.accelerationZ, "X", "Y", "Z")
-                    sensorSection("Gyroscope", sensorReading.rotationRateX, sensorReading.rotationRateY, sensorReading.rotationRateZ, "X", "Y", "Z")
-                    sensorSection("Magnetometer", sensorReading.magneticFieldX, sensorReading.magneticFieldY, sensorReading.magneticFieldZ, "X", "Y", "Z")
-                    sensorSection("Orientation", sensorReading.roll, sensorReading.pitch, sensorReading.yaw, "Roll", "Pitch", "Yaw")
-                }
-                .padding(.horizontal)
+            Button { showSensorOverlay.toggle() } label: {
+                Image(systemName: showSensorOverlay ? "waveform.path.ecg" : "waveform.path.ecg.rectangle")
             }
-            controls
-                .padding(.horizontal)
-                .padding(.bottom, 8)
+            Button { showSettings = true } label: { Image(systemName: "gearshape") }
+                .disabled(recordingSession.state == .recording || recordingSession.state == .paused)
         }
+        .font(.title3)
+        .foregroundStyle(.white)
+        .padding(.top, 8)
     }
 
-    private var controls: some View {
-        VStack(spacing: 8) {
-            Text(timerText).font(.system(.headline, design: .monospaced)).foregroundStyle(recordingSession.state == .recording ? .red : .primary)
-            switch recordingSession.state {
-            case .recording:
-                HStack { Button("Pause", action: recordingSession.pause); Button("Stop", action: { recordingSession.stop() }) }.buttonStyle(.borderedProminent)
-            case .paused:
-                HStack { Button("Resume", action: recordingSession.resume); Button("Stop", action: { recordingSession.stop() }) }.buttonStyle(.borderedProminent)
-            default:
-                Button("Start Recording", action: recordingSession.start).buttonStyle(.borderedProminent).disabled(recordingSession.state != .ready)
-            }
+    private var recordingBadge: some View {
+        HStack(spacing: 7) {
+            Circle().fill(recordingSession.state == .recording ? .red : .yellow).frame(width: 9, height: 9)
+            Text(timerText)
         }
+        .font(.system(.subheadline, design: .monospaced).weight(.bold))
+        .foregroundStyle(.white)
+        .padding(.horizontal, 13)
+        .padding(.vertical, 8)
+        .background(.black.opacity(0.6), in: Capsule())
     }
 
-    private var statusText: String {
+    private var sensorOverlay: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            sensorLine("ACC", sensorReading.accelerationX, sensorReading.accelerationY, sensorReading.accelerationZ)
+            sensorLine("GYR", sensorReading.rotationRateX, sensorReading.rotationRateY, sensorReading.rotationRateZ)
+            sensorLine("MAG", sensorReading.magneticFieldX, sensorReading.magneticFieldY, sensorReading.magneticFieldZ)
+            sensorLine("ATT", sensorReading.roll, sensorReading.pitch, sensorReading.yaw)
+        }
+        .font(.system(.caption2, design: .monospaced))
+        .foregroundStyle(.white)
+        .padding(10)
+        .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 10))
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var cameraControls: some View {
         switch recordingSession.state {
-        case .recording: return "REC"
-        case .paused: return "PAUSED"
-        case .ready: return "CAMERA READY"
-        case .configuring: return "CONFIGURING"
-        case .finishing: return "SAVING"
-        case .idle: return "CAMERA"
-        case .error(let message): return message
+        case .recording:
+            HStack(spacing: 56) {
+                cameraControl(symbol: "pause.fill", title: "Pause", action: recordingSession.pause)
+                cameraControl(symbol: "stop.fill", title: "Stop", tint: .red) { recordingSession.stop() }
+            }
+        case .paused:
+            HStack(spacing: 56) {
+                cameraControl(symbol: "play.fill", title: "Resume", action: recordingSession.resume)
+                cameraControl(symbol: "stop.fill", title: "Stop", tint: .red) { recordingSession.stop() }
+            }
+        default:
+            Button(action: recordingSession.start) {
+                Circle()
+                    .stroke(.white, lineWidth: 5)
+                    .frame(width: 76, height: 76)
+                    .overlay(Circle().fill(.red).padding(7))
+            }
+            .buttonStyle(.plain)
+            .disabled(recordingSession.state != .ready)
+            .opacity(recordingSession.state == .ready ? 1 : 0.55)
         }
     }
 
@@ -102,15 +142,22 @@ struct ContentView: View {
         return String(format: "%@ %02d:%02d:%02d", recordingSession.state == .paused ? "PAUSED" : "REC", seconds / 3600, seconds / 60 % 60, seconds % 60)
     }
 
-    private func sensorSection(_ title: String, _ x: Double, _ y: Double, _ z: Double, _ xLabel: String, _ yLabel: String, _ zLabel: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.subheadline.weight(.semibold))
-            HStack { sensorValue(xLabel, x); sensorValue(yLabel, y); sensorValue(zLabel, z) }
+    private func cameraControl(symbol: String, title: String, tint: Color = .white, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 7) {
+                Image(systemName: symbol)
+                    .font(.title3.weight(.bold))
+                    .frame(width: 54, height: 54)
+                    .background(.black.opacity(0.55), in: Circle())
+                Text(title).font(.caption.weight(.semibold))
+            }
+            .foregroundStyle(tint)
         }
+        .buttonStyle(.plain)
     }
 
-    private func sensorValue(_ label: String, _ value: Double) -> some View {
-        VStack { Text(label).font(.caption); Text(value, format: .number.precision(.fractionLength(3))).font(.system(.body, design: .monospaced)) }.frame(maxWidth: .infinity)
+    private func sensorLine(_ label: String, _ x: Double, _ y: Double, _ z: Double) -> some View {
+        Text("\(label)  X \(x, format: .number.precision(.fractionLength(3)))  Y \(y, format: .number.precision(.fractionLength(3)))  Z \(z, format: .number.precision(.fractionLength(3)))")
     }
 }
 

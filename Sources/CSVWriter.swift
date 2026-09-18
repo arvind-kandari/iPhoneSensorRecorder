@@ -22,9 +22,7 @@ final class CSVWriter {
             )
         }
 
-        let header = """
-        recording_time,sensor_timestamp,acceleration_x,acceleration_y,acceleration_z,rotation_x,rotation_y,rotation_z,magnetic_x,magnetic_y,magnetic_z,roll,pitch,yaw
-        """
+        let header = "recording_time,sensor_timestamp,acceleration_x,acceleration_y,acceleration_z,rotation_x,rotation_y,rotation_z,magnetic_x,magnetic_y,magnetic_z,roll,pitch,yaw\n"
 
         try header.write(
             to: url,

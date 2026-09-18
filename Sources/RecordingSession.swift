@@ -1,309 +1,169 @@
-import Foundation
 import AVFoundation
+import Combine
+import Foundation
 
-final class RecordingSession {
+final class RecordingSession: ObservableObject {
+    let captureSession: AVCaptureSession
 
-    private let timeSynchronizer =
-        TimeSynchronizer()
+    @Published private(set) var state: RecordingState = .idle
+    @Published private(set) var elapsedTime: TimeInterval = 0
+    @Published private(set) var formatOptions: [CameraFormatOption] = []
+    @Published private(set) var selectedFormat: CameraFormatOption?
 
-    private lazy var sensorManager =
-        SensorManager(
-            timeSynchronizer: timeSynchronizer
-        )
-
-    private let cameraRecorder =
-        CameraRecorder()
-
-    private let csvWriter =
-        CSVWriter()
-
-    private let videoWriter =
-        VideoWriter()
-
-    private let metadataWriter =
-        MetadataWriter()
-
-    private(set) var state:
-        RecordingState = .idle
-
-    private var cameraIsConfigured = false
+    private let timeSynchronizer = TimeSynchronizer()
+    private lazy var sensorManager = SensorManager(timeSynchronizer: timeSynchronizer)
+    private let cameraRecorder = CameraRecorder()
+    private let csvWriter = CSVWriter()
+    private let videoWriter = VideoWriter()
+    private let metadataWriter = MetadataWriter()
     private var cameraWidth: Int?
     private var cameraHeight: Int?
+    private var recordingFiles: RecordingFiles?
+    private var timer: Timer?
 
-    private var recordingFiles:
-        RecordingFiles?
-
-    var onStateChanged:
-        ((RecordingState) -> Void)?
-
-    var onSensorReading:
-        ((SensorReading) -> Void)?
+    var onSensorReading: ((SensorReading) -> Void)?
 
     init() {
-
-        sensorManager.onReading = {
-            [weak self] reading in
-
-            guard let self = self else {
-                return
-            }
-
-            self.csvWriter.write(
-                reading
-            )
-
-            self.onSensorReading?(
-                reading
-            )
+        captureSession = cameraRecorder.captureSession
+        sensorManager.onReading = { [weak self] reading in
+            guard let self else { return }
+            if self.state == .recording { self.csvWriter.write(reading) }
+            self.onSensorReading?(reading)
         }
-
-        cameraRecorder.onFrame = {
-            [weak self] sampleBuffer,
-            cameraTimestamp in
-
-            guard let self = self else {
-                return
-            }
-
-            self.videoWriter.append(
-                sampleBuffer
-            )
-
-            print(
-                "Camera timestamp: " +
-                "\(cameraTimestamp)"
-            )
+        cameraRecorder.onFrame = { [weak self] sampleBuffer, _ in
+            self?.videoWriter.append(sampleBuffer)
         }
-
-        cameraRecorder.onConfigured = {
-            [weak self] width,
-            height in
-
-            guard let self = self else {
-                return
+        cameraRecorder.onConfigured = { [weak self] width, height in
+            self?.publish {
+                self?.cameraWidth = width
+                self?.cameraHeight = height
+                self?.setState(.ready)
             }
-
-            self.cameraWidth = width
-            self.cameraHeight = height
-
-            self.cameraIsConfigured = true
-
-            print(
-                "Camera ready: " +
-                "\(width)x\(height)"
-            )
-
-            self.setState(
-                .ready
-            )
+        }
+        cameraRecorder.onConfigurationFailed = { [weak self] message in
+            self?.publish {
+                self?.cameraWidth = nil
+                self?.cameraHeight = nil
+                self?.setState(.error(message))
+            }
+        }
+        cameraRecorder.onFormatsChanged = { [weak self] options, selected in
+            DispatchQueue.main.async {
+                self?.formatOptions = options
+                self?.selectedFormat = selected
+            }
         }
     }
 
     func configure() {
-
-        guard state == .idle else {
-            return
-        }
-
-        setState(
-            .configuring
-        )
-
+        guard state == .idle else { return }
+        setState(.configuring)
         cameraRecorder.configure()
     }
 
+    func selectVideoFormat(_ option: CameraFormatOption) {
+        guard state == .ready else { return }
+        cameraRecorder.selectFormat(option)
+    }
+
     func start() {
-
-        guard state == .ready else {
-
-            print(
-                "Cannot start. Current state: " +
-                "\(state)"
-            )
-
-            return
-        }
-
-        guard cameraIsConfigured else {
-
-            print(
-                "Camera is not ready"
-            )
-
-            return
-        }
-
-        guard let width = cameraWidth,
-              let height = cameraHeight else {
-
-            print(
-                "Camera dimensions are unavailable"
-            )
-
-            return
-        }
-
+        guard state == .ready, let width = cameraWidth, let height = cameraHeight, let selectedFormat else { return }
         do {
-
-            let files =
-                try RecordingFiles()
-
+            let files = try RecordingFiles()
             recordingFiles = files
-
-            try csvWriter.startRecording(
-                at: files.sensorCSVURL
-            )
-
-            try videoWriter.start(
-                at: files.videoURL,
-                width: width,
-                height: height
-            )
-
-            let metadata =
-                RecordingMetadata(
-                    appVersion:
-                        AppInfo.version,
-
-                    recordingID:
-                        files.folderURL.lastPathComponent,
-
-                    sensorFrequencyHz:
-                        100.0,
-
-                    videoFile:
-                        "video.mov",
-
-                    sensorFile:
-                        "sensors.csv",
-
-                    createdAt:
-                        Date()
-                )
-
-            try metadataWriter.write(
-                metadata: metadata,
-                to: files.metadataURL
-            )
-
+            try csvWriter.startRecording(at: files.sensorCSVURL)
+            try videoWriter.start(at: files.videoURL, width: width, height: height)
+            try metadataWriter.write(metadata: RecordingMetadata(
+                appVersion: AppInfo.version,
+                recordingID: files.folderURL.lastPathComponent,
+                sensorFrequencyHz: 100,
+                videoFile: "video.mov",
+                sensorFile: "sensors.csv",
+                createdAt: Date(),
+                videoWidth: width,
+                videoHeight: height,
+                videoResolution: selectedFormat.resolutionLabel,
+                videoFPS: selectedFormat.fps
+            ), to: files.metadataURL)
             timeSynchronizer.start()
-
             sensorManager.start()
-
             cameraRecorder.start()
-
-            setState(
-                .recording
-            )
-
-            print(
-                "Recording started"
-            )
-
-            print(
-                "Recording folder:"
-            )
-
-            print(
-                files.folderURL.path
-            )
-
+            startTimer()
+            setState(.recording)
         } catch {
-
-            setState(
-                .error(
-                    "Recording error: " +
-                    error.localizedDescription
-                )
-            )
+            setState(.error("Recording error: \(error.localizedDescription)"))
         }
     }
 
-    func stop(
-        completion: @escaping () -> Void
-    ) {
-
-        guard state == .recording else {
-
-            completion()
-
-            return
-        }
-
-        setState(
-            .finishing
-        )
-
+    func pause() {
+        guard state == .recording else { return }
+        timeSynchronizer.pause()
         sensorManager.stop()
+        videoWriter.pause()
+        stopTimer()
+        setState(.paused)
+    }
 
-        cameraRecorder.stop {
-            [weak self] in
+    func resume() {
+        guard state == .paused else { return }
+        timeSynchronizer.resume()
+        videoWriter.resume()
+        sensorManager.start()
+        startTimer()
+        setState(.recording)
+    }
 
-            guard let self = self else {
-
-                completion()
-
-                return
-            }
-
+    func stop(completion: @escaping () -> Void = {}) {
+        guard state == .recording || state == .paused else { completion(); return }
+        setState(.finishing)
+        stopTimer()
+        sensorManager.stop()
+        cameraRecorder.stop { [weak self] in
+            guard let self else { completion(); return }
             self.csvWriter.stopRecording()
-
-            self.videoWriter.finish {
-                [weak self] url in
-
-                guard let self = self else {
-
-                    completion()
-
-                    return
-                }
-
-                if let url = url {
-
-                    print(
-                        "Video saved:"
-                    )
-
-                    print(
-                        url.path
-                    )
-                }
-
-                if let files =
-                    self.recordingFiles {
-
-                    print(
-                        "Recording folder:"
-                    )
-
-                    print(
-                        files.folderURL.path
-                    )
-                }
-
+            self.videoWriter.finish { [weak self] _ in
+                guard let self else { completion(); return }
                 self.recordingFiles = nil
-
-                self.setState(
-                    .ready
-                )
-
-                completion()
+                self.publish {
+                    self.setElapsedTime(0)
+                    self.setState(.ready)
+                    completion()
+                }
             }
         }
     }
 
-    private func setState(
-        _ newState: RecordingState
-    ) {
+    private func startTimer() {
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            self.setElapsedTime(self.timeSynchronizer.timestamp())
+        }
+    }
 
-        state = newState
+    private func stopTimer() {
+        setElapsedTime(timeSynchronizer.timestamp())
+        timer?.invalidate()
+        timer = nil
+    }
 
-        onStateChanged?(
-            newState
-        )
+    private func setState(_ newState: RecordingState) {
+        if Thread.isMainThread {
+            state = newState
+        } else {
+            DispatchQueue.main.async { [weak self] in self?.state = newState }
+        }
+    }
 
-        print(
-            "State: \(newState)"
-        )
+    private func publish(_ action: @escaping () -> Void) {
+        if Thread.isMainThread {
+            action()
+        } else {
+            DispatchQueue.main.async(execute: action)
+        }
+    }
+
+    private func setElapsedTime(_ value: TimeInterval) {
+        publish { [weak self] in self?.elapsedTime = value }
     }
 }

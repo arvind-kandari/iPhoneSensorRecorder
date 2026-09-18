@@ -13,6 +13,11 @@ struct RecordingMetadata: Codable {
     let sensorFile: String
 
     let createdAt: Date
+
+    let videoWidth: Int
+    let videoHeight: Int
+    let videoResolution: String
+    let videoFPS: Double
 }
 
 final class MetadataWriter {

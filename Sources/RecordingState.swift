@@ -10,6 +10,8 @@ enum RecordingState: Equatable {
 
     case recording
 
+    case paused
+
     case finishing
 
     case error(String)

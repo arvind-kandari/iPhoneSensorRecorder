@@ -2,11 +2,22 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var recordingSession = RecordingSession()
+    @StateObject private var licenseManager = LicenseManager()
     @State private var sensorReading = SensorReading(recordingTime: 0, sensorTimestamp: 0, accelerationX: 0, accelerationY: 0, accelerationZ: 0, rotationRateX: 0, rotationRateY: 0, rotationRateZ: 0, magneticFieldX: 0, magneticFieldY: 0, magneticFieldZ: 0, roll: 0, pitch: 0, yaw: 0)
     @State private var showSettings = false
     @State private var showSensorOverlay = false
 
     var body: some View {
+        Group {
+            if licenseManager.isActivated {
+                activatedContent
+            } else {
+                ActivationView(licenseManager: licenseManager)
+            }
+        }
+    }
+
+    private var activatedContent: some View {
         TabView {
             recordView
                 .tabItem { Label("Record", systemImage: "record.circle") }

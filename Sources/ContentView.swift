@@ -126,7 +126,7 @@ private struct VideoSettingsView: View {
                 }
             }
             .navigationTitle("Video Settings")
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
     }
 }

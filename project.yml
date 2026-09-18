@@ -13,6 +13,7 @@ targets:
       - path: Sources
 
     info:
+      path: Info.plist
       properties:
         NSCameraUsageDescription: "This app uses the camera to record synchronized video."
         NSMotionUsageDescription: "This app uses motion sensors to record synchronized sensor data."

@@ -18,7 +18,8 @@ final class VideoWriter {
     func start(
         at url: URL,
         width: Int,
-        height: Int
+        height: Int,
+        transform: CGAffineTransform
     ) throws {
 
         let fileManager = FileManager.default
@@ -54,6 +55,7 @@ final class VideoWriter {
         )
 
         input.expectsMediaDataInRealTime = true
+        input.transform = transform
 
         guard writer.canAdd(input) else {
             throw VideoWriterError.cannotAddInput

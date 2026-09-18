@@ -92,7 +92,12 @@ final class RecordingSession: ObservableObject {
             let files = try RecordingFiles()
             recordingFiles = files
             try csvWriter.startRecording(at: files.sensorCSVURL)
-            try videoWriter.start(at: files.videoURL, width: width, height: height)
+            try videoWriter.start(
+                at: files.videoURL,
+                width: width,
+                height: height,
+                transform: cameraRecorder.recordingTransform()
+            )
             try metadataWriter.write(metadata: RecordingMetadata(
                 appVersion: AppInfo.version,
                 recordingID: files.folderURL.lastPathComponent,

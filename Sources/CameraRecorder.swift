@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import UIKit
 
 struct CameraFormatOption: Identifiable, Hashable {
     let format: AVCaptureDevice.Format
@@ -77,9 +78,6 @@ final class CameraRecorder: NSObject {
                 return
             }
             self.captureSession.addOutput(self.videoOutput)
-            if let connection = self.videoOutput.connection(with: .video), connection.isVideoRotationAngleSupported(90) {
-                connection.videoRotationAngle = 90
-            }
             self.formatOptions = self.supportedOptions(camera)
             self.selectedFormat = self.formatOptions.first(where: { $0.width == 1920 && $0.height == 1080 && $0.fps == 30 }) ?? self.formatOptions.first
             guard let selected = self.selectedFormat else {
@@ -167,6 +165,19 @@ final class CameraRecorder: NSObject {
             guard let self, let camera = self.camera, camera.hasTorch else { return }
             self.setTorch(!self.torchIsOn, on: camera)
             self.reportCamera()
+        }
+    }
+
+    func recordingTransform() -> CGAffineTransform {
+        switch UIDevice.current.orientation {
+        case .landscapeLeft:
+            return CGAffineTransform(rotationAngle: .pi)
+        case .portraitUpsideDown:
+            return CGAffineTransform(rotationAngle: -.pi / 2)
+        case .landscapeRight:
+            return .identity
+        default:
+            return CGAffineTransform(rotationAngle: .pi / 2)
         }
     }
 

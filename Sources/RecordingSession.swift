@@ -48,13 +48,18 @@ final class RecordingSession {
                 return
             }
 
-            self.csvWriter.write(reading)
+            self.csvWriter.write(
+                reading
+            )
 
-            self.onSensorReading?(reading)
+            self.onSensorReading?(
+                reading
+            )
         }
 
         cameraRecorder.onFrame = {
-            [weak self] sampleBuffer, cameraTimestamp in
+            [weak self] sampleBuffer,
+            cameraTimestamp in
 
             guard let self = self else {
                 return
@@ -65,12 +70,14 @@ final class RecordingSession {
             )
 
             print(
-                "Camera timestamp: \(cameraTimestamp)"
+                "Camera timestamp: " +
+                "\(cameraTimestamp)"
             )
         }
 
         cameraRecorder.onConfigured = {
-            [weak self] width, height in
+            [weak self] width,
+            height in
 
             guard let self = self else {
                 return
@@ -82,10 +89,13 @@ final class RecordingSession {
             self.cameraIsConfigured = true
 
             print(
-                "Camera ready: \(width)x\(height)"
+                "Camera ready: " +
+                "\(width)x\(height)"
             )
 
-            self.setState(.ready)
+            self.setState(
+                .ready
+            )
         }
     }
 
@@ -95,7 +105,9 @@ final class RecordingSession {
             return
         }
 
-        setState(.configuring)
+        setState(
+            .configuring
+        )
 
         cameraRecorder.configure()
     }
@@ -105,7 +117,8 @@ final class RecordingSession {
         guard state == .ready else {
 
             print(
-                "Cannot start. Current state: \(state)"
+                "Cannot start. Current state: " +
+                "\(state)"
             )
 
             return
@@ -179,7 +192,9 @@ final class RecordingSession {
 
             cameraRecorder.start()
 
-            setState(.recording)
+            setState(
+                .recording
+            )
 
             print(
                 "Recording started"
@@ -215,16 +230,14 @@ final class RecordingSession {
             return
         }
 
-        setState(.finishing)
+        setState(
+            .finishing
+        )
 
         sensorManager.stop()
 
-        cameraRecorder.stop()
-
-        csvWriter.stopRecording()
-
-        videoWriter.finish {
-            [weak self] url in
+        cameraRecorder.stop {
+            [weak self] in
 
             guard let self = self else {
 
@@ -233,34 +246,49 @@ final class RecordingSession {
                 return
             }
 
-            if let url = url {
+            self.csvWriter.stopRecording()
 
-                print(
-                    "Video saved:"
+            self.videoWriter.finish {
+                [weak self] url in
+
+                guard let self = self else {
+
+                    completion()
+
+                    return
+                }
+
+                if let url = url {
+
+                    print(
+                        "Video saved:"
+                    )
+
+                    print(
+                        url.path
+                    )
+                }
+
+                if let files =
+                    self.recordingFiles {
+
+                    print(
+                        "Recording folder:"
+                    )
+
+                    print(
+                        files.folderURL.path
+                    )
+                }
+
+                self.recordingFiles = nil
+
+                self.setState(
+                    .ready
                 )
 
-                print(
-                    url.path
-                )
+                completion()
             }
-
-            if let files =
-                self.recordingFiles {
-
-                print(
-                    "Recording folder:"
-                )
-
-                print(
-                    files.folderURL.path
-                )
-            }
-
-            self.recordingFiles = nil
-
-            self.setState(.ready)
-
-            completion()
         }
     }
 

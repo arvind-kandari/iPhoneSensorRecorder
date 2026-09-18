@@ -17,6 +17,10 @@ struct ContentView: View {
     @State private var magneticY = 0.0
     @State private var magneticZ = 0.0
 
+    @State private var roll = 0.0
+    @State private var pitch = 0.0
+    @State private var yaw = 0.0
+
     private let recordingSession =
         RecordingSession()
 
@@ -58,6 +62,16 @@ struct ContentView: View {
                     z: magneticZ
                 )
 
+                sensorSection(
+                    title: "Attitude",
+                    x: roll,
+                    y: pitch,
+                    z: yaw,
+                    xLabel: "Roll",
+                    yLabel: "Pitch",
+                    zLabel: "Yaw"
+                )
+
                 recordingButton
             }
             .padding()
@@ -74,10 +88,8 @@ struct ContentView: View {
             spacing: 8
         ) {
 
-            Text(
-                "Status"
-            )
-            .font(.headline)
+            Text("Status")
+                .font(.headline)
 
             HStack {
 
@@ -153,7 +165,10 @@ struct ContentView: View {
         title: String,
         x: Double,
         y: Double,
-        z: Double
+        z: Double,
+        xLabel: String = "X",
+        yLabel: String = "Y",
+        zLabel: String = "Z"
     ) -> some View {
 
         VStack(
@@ -167,17 +182,17 @@ struct ContentView: View {
             HStack {
 
                 sensorValue(
-                    label: "X",
+                    label: xLabel,
                     value: x
                 )
 
                 sensorValue(
-                    label: "Y",
+                    label: yLabel,
                     value: y
                 )
 
                 sensorValue(
-                    label: "Z",
+                    label: zLabel,
                     value: z
                 )
             }
@@ -200,10 +215,12 @@ struct ContentView: View {
                     value
                 )
             )
-            .font(.system(
-                .body,
-                design: .monospaced
-            ))
+            .font(
+                .system(
+                    .body,
+                    design: .monospaced
+                )
+            )
         }
         .frame(
             maxWidth: .infinity
@@ -289,6 +306,15 @@ struct ContentView: View {
 
                 magneticZ =
                     reading.magneticFieldZ
+
+                roll =
+                    reading.roll
+
+                pitch =
+                    reading.pitch
+
+                yaw =
+                    reading.yaw
             }
         }
 

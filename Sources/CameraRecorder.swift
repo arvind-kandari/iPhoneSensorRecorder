@@ -5,17 +5,21 @@ final class CameraRecorder: NSObject {
 
     let captureSession = AVCaptureSession()
 
-    private let videoOutput = AVCaptureVideoDataOutput()
+    private let videoOutput =
+        AVCaptureVideoDataOutput()
 
-    private let sessionQueue = DispatchQueue(
-        label: "CameraRecorder.SessionQueue"
-    )
+    private let sessionQueue =
+        DispatchQueue(
+            label: "CameraRecorder.SessionQueue"
+        )
 
     private var isConfigured = false
 
-    var onFrame: ((CMSampleBuffer, TimeInterval) -> Void)?
+    var onFrame:
+        ((CMSampleBuffer, TimeInterval) -> Void)?
 
-    var onConfigured: ((Int, Int) -> Void)?
+    var onConfigured:
+        ((Int, Int) -> Void)?
 
     func configure() {
 
@@ -33,13 +37,16 @@ final class CameraRecorder: NSObject {
 
             self.captureSession.sessionPreset = .high
 
-            guard let camera = AVCaptureDevice.default(
-                .builtInWideAngleCamera,
-                for: .video,
-                position: .back
-            ) else {
+            guard let camera =
+                    AVCaptureDevice.default(
+                        .builtInWideAngleCamera,
+                        for: .video,
+                        position: .back
+                    ) else {
 
-                print("Back camera not available")
+                print(
+                    "Back camera not available"
+                )
 
                 self.captureSession.commitConfiguration()
 
@@ -48,13 +55,18 @@ final class CameraRecorder: NSObject {
 
             do {
 
-                let input = try AVCaptureDeviceInput(
-                    device: camera
-                )
+                let input =
+                    try AVCaptureDeviceInput(
+                        device: camera
+                    )
 
-                guard self.captureSession.canAddInput(input) else {
+                guard self.captureSession.canAddInput(
+                    input
+                ) else {
 
-                    print("Cannot add camera input")
+                    print(
+                        "Cannot add camera input"
+                    )
 
                     self.captureSession.commitConfiguration()
 
@@ -66,7 +78,8 @@ final class CameraRecorder: NSObject {
             } catch {
 
                 print(
-                    "Camera input error: \(error.localizedDescription)"
+                    "Camera input error: " +
+                    error.localizedDescription
                 )
 
                 self.captureSession.commitConfiguration()
@@ -79,33 +92,45 @@ final class CameraRecorder: NSObject {
                     kCVPixelFormatType_32BGRA
             ]
 
-            self.videoOutput.alwaysDiscardsLateVideoFrames = false
+            self.videoOutput.alwaysDiscardsLateVideoFrames =
+                false
 
             self.videoOutput.setSampleBufferDelegate(
                 self,
-                queue: DispatchQueue(
-                    label: "CameraRecorder.VideoQueue"
-                )
+                queue:
+                    DispatchQueue(
+                        label:
+                            "CameraRecorder.VideoQueue"
+                    )
             )
 
             guard self.captureSession.canAddOutput(
                 self.videoOutput
             ) else {
 
-                print("Cannot add video output")
+                print(
+                    "Cannot add video output"
+                )
 
                 self.captureSession.commitConfiguration()
 
                 return
             }
 
-            self.captureSession.addOutput(self.videoOutput)
+            self.captureSession.addOutput(
+                self.videoOutput
+            )
 
             if let connection =
-                self.videoOutput.connection(with: .video) {
+                    self.videoOutput.connection(
+                        with: .video
+                    ) {
 
-                if connection.isVideoOrientationSupported {
-                    connection.videoOrientation = .portrait
+                if connection.isVideoRotationAngleSupported(
+                    90
+                ) {
+
+                    connection.videoRotationAngle = 90
                 }
             }
 
@@ -114,17 +139,24 @@ final class CameraRecorder: NSObject {
                     camera.activeFormat.formatDescription
                 )
 
-            let width = Int(dimensions.width)
-            let height = Int(dimensions.height)
+            let width =
+                Int(dimensions.width)
+
+            let height =
+                Int(dimensions.height)
 
             self.captureSession.commitConfiguration()
 
             self.isConfigured = true
 
-            self.onConfigured?(width, height)
+            self.onConfigured?(
+                width,
+                height
+            )
 
             print(
-                "Camera configured: \(width)x\(height)"
+                "Camera configured: " +
+                "\(width)x\(height)"
             )
         }
     }
@@ -139,7 +171,9 @@ final class CameraRecorder: NSObject {
 
             guard self.isConfigured else {
 
-                print("Camera is not configured")
+                print(
+                    "Camera is not configured"
+                )
 
                 return
             }
@@ -150,25 +184,35 @@ final class CameraRecorder: NSObject {
 
             self.captureSession.startRunning()
 
-            print("Camera started")
+            print(
+                "Camera started"
+            )
         }
     }
 
-    func stop() {
+    func stop(
+        completion: @escaping () -> Void
+    ) {
 
         sessionQueue.async { [weak self] in
 
             guard let self = self else {
+
+                completion()
+
                 return
             }
 
-            guard self.captureSession.isRunning else {
-                return
+            if self.captureSession.isRunning {
+
+                self.captureSession.stopRunning()
+
+                print(
+                    "Camera stopped"
+                )
             }
 
-            self.captureSession.stopRunning()
-
-            print("Camera stopped")
+            completion()
         }
     }
 }
@@ -182,21 +226,23 @@ extension CameraRecorder:
         from connection: AVCaptureConnection
     ) {
 
-        guard CMSampleBufferDataIsReady(sampleBuffer) else {
+        guard CMSampleBufferDataIsReady(
+            sampleBuffer
+        ) else {
             return
         }
 
         let timestamp =
-         CMSampleBufferGetPresentationTimeStamp(
-         sampleBuffer
-         )
+            CMSampleBufferGetPresentationTimeStamp(
+                sampleBuffer
+            )
 
         let seconds =
-        CMTimeGetSeconds(timestamp)
+            CMTimeGetSeconds(timestamp)
 
-onFrame?(
-    sampleBuffer,
-    seconds
-)
+        onFrame?(
+            sampleBuffer,
+            seconds
+        )
     }
 }

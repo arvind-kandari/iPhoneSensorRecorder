@@ -126,7 +126,7 @@ final class CameraRecorder: NSObject {
     private func supportedOptions(_ camera: AVCaptureDevice) -> [CameraFormatOption] {
         let targets: [(Int, Int)] = [(640, 480), (1280, 720), (1920, 1080), (2560, 1440), (3840, 2160)]
         let frameRates: [Double] = [24, 30, 60]
-        let options = camera.formats.flatMap { format in
+        let options: [CameraFormatOption] = camera.formats.flatMap { format -> [CameraFormatOption] in
             let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
             let width = Int(dimensions.width), height = Int(dimensions.height)
             guard targets.contains(where: { $0.0 == width && $0.1 == height }) else { return [] }
@@ -152,7 +152,7 @@ final class CameraRecorder: NSObject {
             let duration = CMTime(value: 1, timescale: CMTimeScale(option.fps))
             camera.activeVideoMinFrameDuration = duration
             camera.activeVideoMaxFrameDuration = duration
-            guard CMFormatDescriptionEqual(camera.activeFormat.formatDescription, option.format.formatDescription),
+            guard CMFormatDescriptionEqual(camera.activeFormat.formatDescription, otherFormatDescription: option.format.formatDescription),
                   CMTimeCompare(camera.activeVideoMinFrameDuration, duration) == 0,
                   CMTimeCompare(camera.activeVideoMaxFrameDuration, duration) == 0 else {
                 return "Camera could not apply \(option.resolutionLabel) at \(Int(option.fps)) FPS"

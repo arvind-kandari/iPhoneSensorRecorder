@@ -23,6 +23,7 @@ enum LicenseVerificationError: LocalizedError {
     case missingField(String)
     case licenseExpired
     case wrongDevice
+    case deviceIdentityUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -44,6 +45,8 @@ enum LicenseVerificationError: LocalizedError {
             return "This license has expired."
         case .wrongDevice:
             return "This license is not valid for this iPhone."
+        case .deviceIdentityUnavailable:
+            return "Unable to access this iPhone's secure device identity."
         }
     }
 }
@@ -185,7 +188,13 @@ enum LicenseVerifier {
             throw LicenseVerificationError.invalidPayload
         }
 
-        let identity = DeviceIdentity.shared
+        let identity: DeviceIdentity
+
+        do {
+        identity = try DeviceIdentity.load()
+        } catch {
+        throw LicenseVerificationError.deviceIdentityUnavailable
+        }
 
         guard devicePublicKey == identity.publicKeyBase64URL else {
             throw LicenseVerificationError.wrongDevice

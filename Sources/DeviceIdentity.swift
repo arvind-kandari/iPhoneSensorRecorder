@@ -38,8 +38,6 @@ struct DeviceIdentity {
         self.privateKey = privateKey
     }
 
-    // IMPORTANT:
-    // Do not use a static `shared = DeviceIdentity()` anymore.
     // Initialization can fail, so callers must handle the error.
     static func load() throws -> DeviceIdentity {
         let key = try loadOrCreatePrivateKey()
@@ -59,6 +57,7 @@ struct DeviceIdentity {
     /// The full public key remains the cryptographic identity.
     var deviceID: String {
         let digest = SHA256.hash(data: publicKey.rawRepresentation)
+
         let hex = digest
             .map { String(format: "%02X", $0) }
             .joined()
@@ -95,8 +94,10 @@ struct DeviceIdentity {
     }
 
     private static func loadKeychainData() throws -> Data? {
+        // The private key is stored as raw bytes, so use a
+        // Generic Password Keychain item rather than kSecClassKey.
         let query: [String: Any] = [
-            kSecClass as String: kSecClassKey,
+            kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
             kSecAttrAccount as String: keychainAccount,
             kSecReturnData as String: true,
@@ -128,7 +129,7 @@ struct DeviceIdentity {
 
     private static func saveKeychainData(_ data: Data) throws {
         let query: [String: Any] = [
-            kSecClass as String: kSecClassKey,
+            kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
             kSecAttrAccount as String: keychainAccount,
             kSecValueData as String: data,

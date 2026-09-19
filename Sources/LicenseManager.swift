@@ -82,7 +82,25 @@ final class LicenseManager: ObservableObject {
                 return
             }
 
-            guard verified.deviceID == DeviceIdentity.shared.deviceID else {
+            let currentDeviceID: String
+
+            do {
+                currentDeviceID = try DeviceIdentity.load().deviceID
+            } catch {
+                clearInvalidStoredActivation()
+                return
+            }
+
+            let currentDeviceID: String
+
+            do {
+                currentDeviceID = try DeviceIdentity.load().deviceID
+            } catch {
+                     clearInvalidStoredActivation()
+                     return
+            }
+
+            guard verified.deviceID == currentDeviceID else {
                 clearInvalidStoredActivation()
                 return
             }

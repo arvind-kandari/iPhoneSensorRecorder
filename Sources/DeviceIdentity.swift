@@ -6,15 +6,21 @@ enum DeviceIdentityError: LocalizedError {
     case keychainWriteFailed(OSStatus)
     case keychainReadFailed(OSStatus)
     case invalidStoredPrivateKey
+    case unableToInitialize
 
     var errorDescription: String? {
         switch self {
         case .keychainWriteFailed(let status):
             return "Unable to store the device identity in Keychain. Error \(status)."
+
         case .keychainReadFailed(let status):
             return "Unable to read the device identity from Keychain. Error \(status)."
+
         case .invalidStoredPrivateKey:
             return "The stored device identity is invalid."
+
+        case .unableToInitialize:
+            return "Unable to initialize the device identity."
         }
     }
 }
@@ -22,18 +28,22 @@ enum DeviceIdentityError: LocalizedError {
 struct DeviceIdentity {
     let privateKey: Curve25519.Signing.PrivateKey
 
-    static let shared = DeviceIdentity()
-
     private static let keychainService =
         "com.arvindkandari.iPhoneSensorRecorder.device-identity"
-    private static let keychainAccount = "device-signing-private-key"
 
-    private init() {
-        do {
-            self.privateKey = try Self.loadOrCreatePrivateKey()
-        } catch {
-            fatalError("Unable to initialize device identity: \(error.localizedDescription)")
-        }
+    private static let keychainAccount =
+        "device-signing-private-key"
+
+    private init(privateKey: Curve25519.Signing.PrivateKey) {
+        self.privateKey = privateKey
+    }
+
+    // IMPORTANT:
+    // Do not use a static `shared = DeviceIdentity()` anymore.
+    // Initialization can fail, so callers must handle the error.
+    static func load() throws -> DeviceIdentity {
+        let key = try loadOrCreatePrivateKey()
+        return DeviceIdentity(privateKey: key)
     }
 
     var publicKey: Curve25519.Signing.PublicKey {
@@ -49,7 +59,10 @@ struct DeviceIdentity {
     /// The full public key remains the cryptographic identity.
     var deviceID: String {
         let digest = SHA256.hash(data: publicKey.rawRepresentation)
-        let hex = digest.map { String(format: "%02X", $0) }.joined()
+        let hex = digest
+            .map { String(format: "%02X", $0) }
+            .joined()
+
         return "CYM-\(String(hex.prefix(8)))"
     }
 
@@ -61,7 +74,9 @@ struct DeviceIdentity {
         """
     }
 
-    private static func loadOrCreatePrivateKey() throws -> Curve25519.Signing.PrivateKey {
+    private static func loadOrCreatePrivateKey() throws
+        -> Curve25519.Signing.PrivateKey
+    {
         if let storedData = try loadKeychainData() {
             do {
                 return try Curve25519.Signing.PrivateKey(
@@ -73,7 +88,9 @@ struct DeviceIdentity {
         }
 
         let generated = Curve25519.Signing.PrivateKey()
+
         try saveKeychainData(generated.rawRepresentation)
+
         return generated
     }
 
@@ -87,13 +104,18 @@ struct DeviceIdentity {
         ]
 
         var result: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        let status = SecItemCopyMatching(
+            query as CFDictionary,
+            &result
+        )
 
         switch status {
         case errSecSuccess:
             guard let data = result as? Data else {
                 throw DeviceIdentityError.invalidStoredPrivateKey
             }
+
             return data
 
         case errSecItemNotFound:
@@ -110,10 +132,14 @@ struct DeviceIdentity {
             kSecAttrService as String: keychainService,
             kSecAttrAccount as String: keychainAccount,
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            kSecAttrAccessible as String:
+                kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         ]
 
-        let status = SecItemAdd(query as CFDictionary, nil)
+        let status = SecItemAdd(
+            query as CFDictionary,
+            nil
+        )
 
         guard status == errSecSuccess else {
             throw DeviceIdentityError.keychainWriteFailed(status)

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ActivationView: View {
     @ObservedObject var licenseManager: LicenseManager
@@ -7,6 +8,9 @@ struct ActivationView: View {
     @State private var username = ""
     @State private var licenseKey = ""
     @State private var errorMessage = ""
+    @State private var deviceIdentity: DeviceIdentity?
+    @State private var deviceIdentityError = ""
+
     @FocusState private var focusedField: Field?
 
     private enum Field {
@@ -15,13 +19,10 @@ struct ActivationView: View {
         case licenseKey
     }
 
-    private var deviceIdentity: DeviceIdentity {
-        .shared
-    }
-
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            Color.black
+                .ignoresSafeArea()
 
             ScrollView {
                 VStack(spacing: 24) {
@@ -45,16 +46,38 @@ struct ActivationView: View {
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.secondary)
 
-                        deviceInfoRow(
-                            title: "Device ID",
-                            value: deviceIdentity.deviceID
-                        )
+                        if let identity = deviceIdentity {
+                            deviceInfoRow(
+                                title: "Device ID",
+                                value: identity.deviceID
+                            )
 
-                        deviceInfoRow(
-                            title: "Device Public Key",
-                            value: deviceIdentity.publicKeyBase64URL,
-                            monospaced: true
-                        )
+                            deviceInfoRow(
+                                title: "Device Public Key",
+                                value: identity.publicKeyBase64URL,
+                                monospaced: true
+                            )
+                        } else {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("Device identity unavailable")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.red)
+
+                                Text(
+                                    deviceIdentityError.isEmpty
+                                    ? "Initializing secure device identity..."
+                                    : deviceIdentityError
+                                )
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                                Button("RETRY") {
+                                    loadDeviceIdentity()
+                                }
+                                .buttonStyle(.bordered)
+                                .tint(.red)
+                            }
+                        }
                     }
                     .padding(16)
                     .background(
@@ -80,7 +103,10 @@ struct ActivationView: View {
                                 .font(.subheadline.weight(.semibold))
 
                             TextEditor(text: $licenseKey)
-                                .focused($focusedField, equals: .licenseKey)
+                                .focused(
+                                    $focusedField,
+                                    equals: .licenseKey
+                                )
                                 .frame(minHeight: 130)
                                 .padding(8)
                                 .scrollContentBackground(.hidden)
@@ -97,7 +123,10 @@ struct ActivationView: View {
                         Text(errorMessage)
                             .font(.footnote)
                             .foregroundStyle(.red)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .frame(
+                                maxWidth: .infinity,
+                                alignment: .leading
+                            )
                     }
 
                     Button(action: activate) {
@@ -109,9 +138,22 @@ struct ActivationView: View {
                     .buttonStyle(.borderedProminent)
                     .tint(.red)
                     .disabled(
-                        fullName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                        username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                        licenseKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        deviceIdentity == nil ||
+                        fullName
+                            .trimmingCharacters(
+                                in: .whitespacesAndNewlines
+                            )
+                            .isEmpty ||
+                        username
+                            .trimmingCharacters(
+                                in: .whitespacesAndNewlines
+                            )
+                            .isEmpty ||
+                        licenseKey
+                            .trimmingCharacters(
+                                in: .whitespacesAndNewlines
+                            )
+                            .isEmpty
                     )
 
                     Text("Activation is verified offline on this iPhone.")
@@ -125,6 +167,20 @@ struct ActivationView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .task {
+            loadDeviceIdentity()
+        }
+    }
+
+    private func loadDeviceIdentity() {
+        deviceIdentityError = ""
+
+        do {
+            deviceIdentity = try DeviceIdentity.load()
+        } catch {
+            deviceIdentity = nil
+            deviceIdentityError = error.localizedDescription
+        }
     }
 
     private func deviceInfoRow(
@@ -157,7 +213,10 @@ struct ActivationView: View {
                 )
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(
+                    maxWidth: .infinity,
+                    alignment: .leading
+                )
         }
     }
 
@@ -186,6 +245,11 @@ struct ActivationView: View {
 
     private func activate() {
         errorMessage = ""
+
+        guard deviceIdentity != nil else {
+            errorMessage = "Device identity is unavailable. Tap RETRY."
+            return
+        }
 
         do {
             try licenseManager.activate(

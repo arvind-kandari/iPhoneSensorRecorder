@@ -399,11 +399,12 @@ struct ContentView: View {
         _ y: Double,
         _ z: Double
     ) -> some View {
-        Text(
-            "\(label)  " +
-            "X \(x, format: .number.precision(.fractionLength(3)))  " +
-            "Y \(y, format: .number.precision(.fractionLength(3)))  " +
-            "Z \(z, format: .number.precision(.fractionLength(3)))"
+        let xText = String(format: "%.3f", x)
+        let yText = String(format: "%.3f", y)
+        let zText = String(format: "%.3f", z)
+
+        return Text(
+            "\(label)  X \(xText)  Y \(yText)  Z \(zText)"
         )
     }
 }

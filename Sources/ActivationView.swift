@@ -15,13 +15,17 @@ struct ActivationView: View {
         case licenseKey
     }
 
+    private var deviceIdentity: DeviceIdentity {
+        .shared
+    }
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
             ScrollView {
                 VStack(spacing: 24) {
-                    Spacer(minLength: 60)
+                    Spacer(minLength: 40)
 
                     Image(systemName: "checkmark.seal")
                         .font(.system(size: 54))
@@ -35,6 +39,28 @@ struct ActivationView: View {
                             .font(.title3)
                             .foregroundStyle(.secondary)
                     }
+
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("THIS IPHONE")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.secondary)
+
+                        deviceInfoRow(
+                            title: "Device ID",
+                            value: deviceIdentity.deviceID
+                        )
+
+                        deviceInfoRow(
+                            title: "Device Public Key",
+                            value: deviceIdentity.publicKeyBase64URL,
+                            monospaced: true
+                        )
+                    }
+                    .padding(16)
+                    .background(
+                        Color.white.opacity(0.06),
+                        in: RoundedRectangle(cornerRadius: 14)
+                    )
 
                     VStack(alignment: .leading, spacing: 16) {
                         inputField(
@@ -93,12 +119,46 @@ struct ActivationView: View {
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
 
-                    Spacer(minLength: 40)
+                    Spacer(minLength: 30)
                 }
                 .padding(.horizontal, 24)
             }
         }
         .preferredColorScheme(.dark)
+    }
+
+    private func deviceInfoRow(
+        title: String,
+        value: String,
+        monospaced: Bool = false
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+
+                Spacer()
+
+                Button {
+                    UIPasteboard.general.string = value
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.red)
+            }
+
+            Text(value)
+                .font(
+                    monospaced
+                    ? .system(.caption, design: .monospaced)
+                    : .subheadline
+                )
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     private func inputField(

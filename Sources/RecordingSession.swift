@@ -17,10 +17,14 @@ final class RecordingSession: ObservableObject {
     let videoWriter = VideoWriter()
     let metadataWriter = MetadataWriter()
 
-    // MARK: - Compatibility API used by ContentView
+   // MARK: - Compatibility API used by ContentView
 
     var captureSession: AVCaptureSession {
         cameraRecorder.captureSession
+    }
+
+    var hasTorch: Bool {
+        true
     }
 
     var torchIsOn = false

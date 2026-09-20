@@ -1,194 +1,199 @@
+import Foundation
 import AVFoundation
 import Combine
-import Foundation
 
 final class RecordingSession: ObservableObject {
-    let captureSession: AVCaptureSession
 
-    @Published private(set) var state: RecordingState = .idle
-    @Published private(set) var elapsedTime: TimeInterval = 0
-    @Published private(set) var formatOptions: [CameraFormatOption] = []
-    @Published private(set) var selectedFormat: CameraFormatOption?
-    @Published private(set) var isFrontCamera = false
-    @Published private(set) var hasTorch = false
-    @Published private(set) var torchIsOn = false
+    @Published var isRecording = false
+    @Published var isPaused = false
+    @Published var elapsedTime: TimeInterval = 0
 
-    private let timeSynchronizer = TimeSynchronizer()
-    private lazy var sensorManager = SensorManager(timeSynchronizer: timeSynchronizer)
-    private let cameraRecorder = CameraRecorder()
-    private let csvWriter = CSVWriter()
-    private let videoWriter = VideoWriter()
-    private let metadataWriter = MetadataWriter()
-    private var cameraWidth: Int?
-    private var cameraHeight: Int?
+    @Published var audioEnabled = true
+
+    let cameraRecorder = CameraRecorder()
+    let sensorManager = SensorManager()
+    let csvWriter = CSVWriter()
+    let videoWriter = VideoWriter()
+    let metadataWriter = MetadataWriter()
+
+    let timeSynchronizer = TimeSynchronizer()
+
     private var recordingFiles: RecordingFiles?
     private var timer: Timer?
 
-    var onSensorReading: ((SensorReading) -> Void)?
-
     init() {
-        captureSession = cameraRecorder.captureSession
-        sensorManager.onReading = { [weak self] reading in
-            guard let self else { return }
-            if self.state == .recording { self.csvWriter.write(reading) }
-            self.onSensorReading?(reading)
-        }
-        cameraRecorder.onFrame = { [weak self] sampleBuffer, _ in
+
+        cameraRecorder.onFrame = { [weak self] sampleBuffer in
             self?.videoWriter.append(sampleBuffer)
         }
-        cameraRecorder.onConfigured = { [weak self] width, height in
-            self?.publish {
-                self?.cameraWidth = width
-                self?.cameraHeight = height
-                self?.setState(.ready)
-            }
-        }
-        cameraRecorder.onConfigurationFailed = { [weak self] message in
-            self?.publish {
-                self?.cameraWidth = nil
-                self?.cameraHeight = nil
-                self?.setState(.error(message))
-            }
-        }
-        cameraRecorder.onFormatsChanged = { [weak self] options, selected in
-            DispatchQueue.main.async {
-                self?.formatOptions = options
-                self?.selectedFormat = selected
-            }
-        }
-        cameraRecorder.onCameraChanged = { [weak self] isFront, hasTorch, torchIsOn in
-            DispatchQueue.main.async {
-                self?.isFrontCamera = isFront
-                self?.hasTorch = hasTorch
-                self?.torchIsOn = torchIsOn
-            }
+
+        cameraRecorder.onAudioFrame = { [weak self] sampleBuffer in
+            self?.videoWriter.appendAudio(sampleBuffer)
         }
     }
 
     func configure() {
-        guard state == .idle else { return }
-        setState(.configuring)
+
         cameraRecorder.configure()
     }
 
-    func selectVideoFormat(_ option: CameraFormatOption) {
-        guard state == .ready else { return }
-        cameraRecorder.selectFormat(option)
-    }
+    func setAudioEnabled(_ enabled: Bool) {
 
-    func switchCamera() {
-        guard state == .ready else { return }
-        cameraRecorder.switchCamera()
-    }
+        guard !isRecording else {
+            return
+        }
 
-    func toggleTorch() {
-        guard state == .ready, hasTorch else { return }
-        cameraRecorder.toggleTorch()
+        audioEnabled = enabled
     }
 
     func start() {
-        guard state == .ready, let width = cameraWidth, let height = cameraHeight, let selectedFormat else { return }
+
+        guard !isRecording else {
+            return
+        }
+
         do {
+
             let files = try RecordingFiles()
             recordingFiles = files
-            try csvWriter.startRecording(at: files.sensorCSVURL)
+
+            try csvWriter.start(url: files.sensorURL)
+
+            let format = cameraRecorder.currentVideoFormat
+
             try videoWriter.start(
-                at: files.videoURL,
-                width: width,
-                height: height,
-                transform: cameraRecorder.recordingTransform()
+                url: files.videoURL,
+                width: format.width,
+                height: format.height,
+                fps: format.fps,
+                audioEnabled: audioEnabled
             )
-            try metadataWriter.write(metadata: RecordingMetadata(
+
+            let metadata = RecordingMetadata(
                 appVersion: AppInfo.version,
-                recordingID: files.folderURL.lastPathComponent,
+                recordingID: files.folder.lastPathComponent,
                 sensorFrequencyHz: 100,
-                videoFile: "video.mov",
-                sensorFile: "sensors.csv",
+                videoFile: files.videoURL.lastPathComponent,
+                sensorFile: files.sensorURL.lastPathComponent,
                 createdAt: Date(),
-                videoWidth: width,
-                videoHeight: height,
-                videoResolution: selectedFormat.resolutionLabel,
-                videoFPS: selectedFormat.fps
-            ), to: files.metadataURL)
+                videoWidth: format.width,
+                videoHeight: format.height,
+                videoResolution: "\(format.width)x\(format.height)",
+                videoFPS: format.fps
+            )
+
+            try metadataWriter.write(
+                metadata,
+                to: files.metadataURL
+            )
+
             timeSynchronizer.start()
-            sensorManager.start()
+
+            sensorManager.start { [weak self] sample in
+
+                guard let self else {
+                    return
+                }
+
+                let timestamp = self.timeSynchronizer.elapsedTime(
+                    for: sample.timestamp
+                )
+
+                self.csvWriter.append(
+                    sample: sample,
+                    timestamp: timestamp
+                )
+            }
+
             cameraRecorder.start()
+
+            isRecording = true
+            isPaused = false
+            elapsedTime = 0
+
             startTimer()
-            setState(.recording)
+
         } catch {
-            setState(.error("Recording error: \(error.localizedDescription)"))
+
+            print("Recording start failed:", error)
         }
     }
 
     func pause() {
-        guard state == .recording else { return }
-        timeSynchronizer.pause()
-        sensorManager.stop()
+
+        guard isRecording, !isPaused else {
+            return
+        }
+
+        sensorManager.pause()
         videoWriter.pause()
-        stopTimer()
-        setState(.paused)
+        timeSynchronizer.pause()
+
+        isPaused = true
     }
 
     func resume() {
-        guard state == .paused else { return }
+
+        guard isRecording, isPaused else {
+            return
+        }
+
         timeSynchronizer.resume()
+        sensorManager.resume()
         videoWriter.resume()
-        sensorManager.start()
-        startTimer()
-        setState(.recording)
+
+        isPaused = false
     }
 
-    func stop(completion: @escaping () -> Void = {}) {
-        guard state == .recording || state == .paused else { completion(); return }
-        setState(.finishing)
-        stopTimer()
+    func stop() {
+
+        guard isRecording else {
+            return
+        }
+
         sensorManager.stop()
-        cameraRecorder.stop { [weak self] in
-            guard let self else { completion(); return }
-            self.csvWriter.stopRecording()
-            self.videoWriter.finish { [weak self] _ in
-                guard let self else { completion(); return }
-                self.recordingFiles = nil
-                self.publish {
-                    self.setElapsedTime(0)
-                    self.setState(.ready)
-                    completion()
-                }
+        cameraRecorder.stop()
+
+        timer?.invalidate()
+        timer = nil
+
+        csvWriter.finish()
+
+        videoWriter.finish { [weak self] _ in
+
+            guard let self else {
+                return
+            }
+
+            DispatchQueue.main.async {
+
+                self.isRecording = false
+                self.isPaused = false
+                self.elapsedTime = 0
             }
         }
+
+        recordingFiles = nil
     }
 
     private func startTimer() {
+
         timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            self.setElapsedTime(self.timeSynchronizer.timestamp())
+
+        timer = Timer.scheduledTimer(
+            withTimeInterval: 0.1,
+            repeats: true
+        ) { [weak self] _ in
+
+            guard let self else {
+                return
+            }
+
+            guard self.isRecording, !self.isPaused else {
+                return
+            }
+
+            self.elapsedTime += 0.1
         }
-    }
-
-    private func stopTimer() {
-        setElapsedTime(timeSynchronizer.timestamp())
-        timer?.invalidate()
-        timer = nil
-    }
-
-    private func setState(_ newState: RecordingState) {
-        if Thread.isMainThread {
-            state = newState
-        } else {
-            DispatchQueue.main.async { [weak self] in self?.state = newState }
-        }
-    }
-
-    private func publish(_ action: @escaping () -> Void) {
-        if Thread.isMainThread {
-            action()
-        } else {
-            DispatchQueue.main.async(execute: action)
-        }
-    }
-
-    private func setElapsedTime(_ value: TimeInterval) {
-        publish { [weak self] in self?.elapsedTime = value }
     }
 }

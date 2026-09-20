@@ -1,195 +1,282 @@
-import Foundation
 import AVFoundation
+
+enum VideoWriterError: Error {
+    case cannotCreateWriter
+    case cannotAddVideoInput
+    case cannotAddAudioInput
+    case cannotStartWriting
+    case cannotFinishWriting
+}
 
 final class VideoWriter {
 
-    private var assetWriter: AVAssetWriter?
-
-    private var videoInput: AVAssetWriterInput?
-
-    private(set) var fileURL: URL?
-
-    private var isWriting = false
     private let lock = NSLock()
+
+    private var writer: AVAssetWriter?
+    private var videoInput: AVAssetWriterInput?
+    private var audioInput: AVAssetWriterInput?
+
+    private var isStarted = false
     private var isPaused = false
-    private var pauseStart: CMTime?
+
+    private var pauseStartTime: CMTime?
     private var pausedDuration = CMTime.zero
 
+    private var videoURL: URL?
+
     func start(
-        at url: URL,
+        url: URL,
         width: Int,
         height: Int,
-        transform: CGAffineTransform
+        fps: Double,
+        audioEnabled: Bool
     ) throws {
 
-        let fileManager = FileManager.default
+        lock.lock()
+        defer { lock.unlock() }
 
-        if fileManager.fileExists(
-            atPath: url.path
-        ) {
-            try fileManager.removeItem(
-                at: url
-            )
-        }
+        let assetWriter = try AVAssetWriter(outputURL: url, fileType: .mov)
 
-        let writer = try AVAssetWriter(
-            outputURL: url,
-            fileType: .mov
-        )
-
-        let settings: [String: Any] = [
-
-            AVVideoCodecKey:
-                AVVideoCodecType.h264,
-
-            AVVideoWidthKey:
-                width,
-
-            AVVideoHeightKey:
-                height
+        let videoSettings: [String: Any] = [
+            AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoWidthKey: width,
+            AVVideoHeightKey: height,
+            AVVideoCompressionPropertiesKey: [
+                AVVideoAverageBitRateKey: 8_000_000,
+                AVVideoExpectedSourceFrameRateKey: fps,
+                AVVideoMaxKeyFrameIntervalKey: Int(fps)
+            ]
         ]
 
-        let input = AVAssetWriterInput(
+        let video = AVAssetWriterInput(
             mediaType: .video,
-            outputSettings: settings
+            outputSettings: videoSettings
         )
 
-        input.expectsMediaDataInRealTime = true
-        input.transform = transform
+        video.expectsMediaDataInRealTime = true
 
-        guard writer.canAdd(input) else {
-            throw VideoWriterError.cannotAddInput
+        guard assetWriter.canAdd(video) else {
+            throw VideoWriterError.cannotAddVideoInput
         }
 
-        writer.add(input)
+        assetWriter.add(video)
 
-        assetWriter = writer
-        videoInput = input
-        fileURL = url
+        var audio: AVAssetWriterInput?
 
-        isWriting = false
+        if audioEnabled {
+
+            let audioSettings: [String: Any] = [
+                AVFormatIDKey: kAudioFormatMPEG4AAC,
+                AVSampleRateKey: 44_100,
+                AVNumberOfChannelsKey: 1,
+                AVEncoderBitRateKey: 128_000
+            ]
+
+            let audioInput = AVAssetWriterInput(
+                mediaType: .audio,
+                outputSettings: audioSettings
+            )
+
+            audioInput.expectsMediaDataInRealTime = true
+
+            guard assetWriter.canAdd(audioInput) else {
+                throw VideoWriterError.cannotAddAudioInput
+            }
+
+            assetWriter.add(audioInput)
+            audio = audioInput
+        }
+
+        writer = assetWriter
+        videoInput = video
+        audioInput = audio
+        videoURL = url
+
+        isStarted = false
         isPaused = false
-        pauseStart = nil
+        pauseStartTime = nil
         pausedDuration = .zero
     }
 
-    func pause() {
-        lock.lock()
-        defer { lock.unlock() }
-        isPaused = true
+    func append(_ sampleBuffer: CMSampleBuffer) {
+
+        appendBuffer(
+            sampleBuffer,
+            to: videoInput
+        )
     }
 
-    func resume() {
-        lock.lock()
-        defer { lock.unlock() }
-        isPaused = false
+    func appendAudio(_ sampleBuffer: CMSampleBuffer) {
+
+        appendBuffer(
+            sampleBuffer,
+            to: audioInput
+        )
     }
 
-    func append(
-        _ sampleBuffer: CMSampleBuffer
+    private func appendBuffer(
+        _ sampleBuffer: CMSampleBuffer,
+        to input: AVAssetWriterInput?
     ) {
 
-        lock.lock()
-        defer { lock.unlock() }
-
-        guard let writer = assetWriter,
-              let input = videoInput else {
+        guard let input = input else {
             return
         }
 
-        guard CMSampleBufferDataIsReady(
-            sampleBuffer
-        ) else {
+        guard CMSampleBufferDataIsReady(sampleBuffer) else {
+            return
+        }
+
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard let writer = writer else {
+            return
+        }
+
+        guard writer.status == .unknown || writer.status == .writing else {
             return
         }
 
         let sourceTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
 
-        if isPaused {
-            if pauseStart == nil {
-                pauseStart = sourceTime
+        if !isStarted {
+
+            guard writer.status == .unknown else {
+                return
             }
+
+            writer.startWriting()
+            writer.startSession(atSourceTime: sourceTime)
+
+            isStarted = true
+        }
+
+        if isPaused {
+
+            if pauseStartTime == nil {
+                pauseStartTime = sourceTime
+            }
+
             return
         }
 
-        if let pauseStart {
-            pausedDuration = CMTimeAdd(pausedDuration, CMTimeSubtract(sourceTime, pauseStart))
-            self.pauseStart = nil
-        }
+        var retimedBuffer = sampleBuffer
 
-        let adjustedBuffer = retimed(sampleBuffer, offset: pausedDuration) ?? sampleBuffer
+        if pausedDuration > .zero {
 
-        if !isWriting {
-            writer.startWriting()
-            writer.startSession(
-                atSourceTime: CMSampleBufferGetPresentationTimeStamp(adjustedBuffer)
+            var timingInfo = [CMSampleTimingInfo](
+                repeating: CMSampleTimingInfo(
+                    duration: .zero,
+                    presentationTimeStamp: .zero,
+                    decodeTimeStamp: .invalid
+                ),
+                count: CMSampleBufferGetNumSamples(sampleBuffer)
             )
 
-            isWriting = true
+            var count = timingInfo.count
+
+            CMSampleBufferGetSampleTimingInfoArray(
+                sampleBuffer,
+                entryCount: count,
+                arrayToFill: &timingInfo,
+                entriesNeededOut: &count
+            )
+
+            for index in 0..<count {
+
+                timingInfo[index].presentationTimeStamp =
+                    timingInfo[index].presentationTimeStamp
+                    .subtracting(pausedDuration)
+
+                if timingInfo[index].decodeTimeStamp.isValid {
+                    timingInfo[index].decodeTimeStamp =
+                        timingInfo[index].decodeTimeStamp
+                        .subtracting(pausedDuration)
+                }
+            }
+
+            var newBuffer: CMSampleBuffer?
+
+            CMSampleBufferCreateCopyWithNewTiming(
+                allocator: kCFAllocatorDefault,
+                sampleBuffer: sampleBuffer,
+                sampleTimingEntryCount: count,
+                sampleTimingArray: timingInfo,
+                sampleBufferOut: &newBuffer
+            )
+
+            if let newBuffer {
+                retimedBuffer = newBuffer
+            }
         }
 
         guard input.isReadyForMoreMediaData else {
             return
         }
 
-        input.append(adjustedBuffer)
+        input.append(retimedBuffer)
     }
 
-    func finish(
-        completion: @escaping (URL?) -> Void
-    ) {
+    func pause() {
 
         lock.lock()
         defer { lock.unlock() }
 
-        guard let writer = assetWriter,
-              let input = videoInput else {
-
-            completion(nil)
+        guard isStarted else {
             return
         }
 
-        input.markAsFinished()
+        isPaused = true
+        pauseStartTime = nil
+    }
+
+    func resume() {
+
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard isStarted else {
+            return
+        }
+
+        isPaused = false
+
+        pauseStartTime = nil
+    }
+
+    func finish(completion: @escaping (URL?) -> Void) {
+
+        lock.lock()
+
+        guard let writer = writer else {
+            lock.unlock()
+            completion(videoURL)
+            return
+        }
+
+        videoInput?.markAsFinished()
+        audioInput?.markAsFinished()
+
+        let outputURL = videoURL
 
         writer.finishWriting { [weak self] in
 
-            let url = self?.fileURL
+            self?.lock.lock()
 
-            self?.assetWriter = nil
+            let success = writer.status == .completed
+
+            self?.writer = nil
             self?.videoInput = nil
-            self?.fileURL = nil
-            self?.isWriting = false
+            self?.audioInput = nil
+            self?.isStarted = false
             self?.isPaused = false
-            self?.pauseStart = nil
-            self?.pausedDuration = .zero
 
-            completion(url)
+            self?.lock.unlock()
+
+            completion(success ? outputURL : nil)
         }
+
+        lock.unlock()
     }
-
-    private func retimed(
-        _ sampleBuffer: CMSampleBuffer,
-        offset: CMTime
-    ) -> CMSampleBuffer? {
-        guard offset != .zero else { return sampleBuffer }
-        var timing = CMSampleTimingInfo()
-        CMSampleBufferGetSampleTimingInfo(sampleBuffer, at: 0, timingInfoOut: &timing)
-        timing.presentationTimeStamp = CMTimeSubtract(timing.presentationTimeStamp, offset)
-        timing.decodeTimeStamp = timing.decodeTimeStamp.isValid
-            ? CMTimeSubtract(timing.decodeTimeStamp, offset) : .invalid
-        var copy: CMSampleBuffer?
-        guard CMSampleBufferCreateCopyWithNewTiming(
-            allocator: kCFAllocatorDefault,
-            sampleBuffer: sampleBuffer,
-            sampleTimingEntryCount: 1,
-            sampleTimingArray: &timing,
-            sampleBufferOut: &copy
-        ) == noErr else { return nil }
-        return copy
-    }
-}
-
-enum VideoWriterError: Error {
-
-    case cannotAddInput
 }

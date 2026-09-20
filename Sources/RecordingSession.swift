@@ -7,33 +7,43 @@ final class RecordingSession: ObservableObject {
     @Published var isRecording = false
     @Published var isPaused = false
     @Published var elapsedTime: TimeInterval = 0
-
     @Published var audioEnabled = true
 
     let cameraRecorder = CameraRecorder()
-    let sensorManager = SensorManager()
+    let timeSynchronizer = TimeSynchronizer()
+    let sensorManager: SensorManager
+
     let csvWriter = CSVWriter()
     let videoWriter = VideoWriter()
     let metadataWriter = MetadataWriter()
-
-    let timeSynchronizer = TimeSynchronizer()
 
     private var recordingFiles: RecordingFiles?
     private var timer: Timer?
 
     init() {
 
-        cameraRecorder.onFrame = { [weak self] sampleBuffer in
+        sensorManager = SensorManager(
+            timeSynchronizer: timeSynchronizer
+        )
+
+        cameraRecorder.onFrame = { [weak self] sampleBuffer, _ in
             self?.videoWriter.append(sampleBuffer)
         }
 
         cameraRecorder.onAudioFrame = { [weak self] sampleBuffer in
-            self?.videoWriter.appendAudio(sampleBuffer)
+            guard let self else {
+                return
+            }
+
+            guard self.audioEnabled else {
+                return
+            }
+
+            self.videoWriter.appendAudio(sampleBuffer)
         }
     }
 
     func configure() {
-
         cameraRecorder.configure()
     }
 
@@ -57,9 +67,14 @@ final class RecordingSession: ObservableObject {
             let files = try RecordingFiles()
             recordingFiles = files
 
-            try csvWriter.start(url: files.sensorURL)
+            try csvWriter.start(
+                url: files.sensorURL
+            )
 
-            let format = cameraRecorder.currentVideoFormat
+            guard let format = cameraRecorder.selectedFormat else {
+                print("Recording start failed: Camera format is not ready.")
+                return
+            }
 
             try videoWriter.start(
                 url: files.videoURL,
@@ -95,9 +110,10 @@ final class RecordingSession: ObservableObject {
                     return
                 }
 
-                let timestamp = self.timeSynchronizer.elapsedTime(
-                    for: sample.timestamp
-                )
+                let timestamp =
+                    self.timeSynchronizer.elapsedTime(
+                        for: sample.sensorTimestamp
+                    )
 
                 self.csvWriter.append(
                     sample: sample,
@@ -115,7 +131,10 @@ final class RecordingSession: ObservableObject {
 
         } catch {
 
-            print("Recording start failed:", error)
+            print(
+                "Recording start failed:",
+                error
+            )
         }
     }
 
@@ -152,28 +171,33 @@ final class RecordingSession: ObservableObject {
         }
 
         sensorManager.stop()
-        cameraRecorder.stop()
 
         timer?.invalidate()
         timer = nil
 
-        csvWriter.finish()
-
-        videoWriter.finish { [weak self] _ in
+        cameraRecorder.stop { [weak self] in
 
             guard let self else {
                 return
             }
 
-            DispatchQueue.main.async {
+            self.csvWriter.finish()
 
-                self.isRecording = false
-                self.isPaused = false
-                self.elapsedTime = 0
+            self.videoWriter.finish { [weak self] _ in
+
+                guard let self else {
+                    return
+                }
+
+                DispatchQueue.main.async {
+
+                    self.isRecording = false
+                    self.isPaused = false
+                    self.elapsedTime = 0
+                    self.recordingFiles = nil
+                }
             }
         }
-
-        recordingFiles = nil
     }
 
     private func startTimer() {
@@ -189,7 +213,9 @@ final class RecordingSession: ObservableObject {
                 return
             }
 
-            guard self.isRecording, !self.isPaused else {
+            guard self.isRecording,
+                  !self.isPaused
+            else {
                 return
             }
 

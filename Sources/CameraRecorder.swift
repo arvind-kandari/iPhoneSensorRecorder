@@ -766,48 +766,10 @@ final class CameraRecorder: NSObject {
     }
 }
 
-// MARK: - Video Delegate
+// MARK: - Capture Output Delegate
 
 extension CameraRecorder:
-    AVCaptureVideoDataOutputSampleBufferDelegate {
-
-    func captureOutput(
-        _ output: AVCaptureOutput,
-        didOutput sampleBuffer: CMSampleBuffer,
-        from connection: AVCaptureConnection
-    ) {
-
-        deliveryLock.lock()
-
-        let shouldDeliver =
-            deliversFrames
-
-        deliveryLock.unlock()
-
-        guard shouldDeliver else {
-            return
-        }
-
-        guard CMSampleBufferDataIsReady(
-            sampleBuffer
-        ) else {
-            return
-        }
-
-        onFrame?(
-            sampleBuffer,
-            CMTimeGetSeconds(
-                CMSampleBufferGetPresentationTimeStamp(
-                    sampleBuffer
-                )
-            )
-        )
-    }
-}
-
-// MARK: - Audio Delegate
-
-extension CameraRecorder:
+    AVCaptureVideoDataOutputSampleBufferDelegate,
     AVCaptureAudioDataOutputSampleBufferDelegate {
 
     func captureOutput(
@@ -818,8 +780,7 @@ extension CameraRecorder:
 
         deliveryLock.lock()
 
-        let shouldDeliver =
-            deliversFrames
+        let shouldDeliver = deliversFrames
 
         deliveryLock.unlock()
 
@@ -827,12 +788,24 @@ extension CameraRecorder:
             return
         }
 
-        guard CMSampleBufferDataIsReady(
-            sampleBuffer
-        ) else {
+        guard CMSampleBufferDataIsReady(sampleBuffer) else {
             return
         }
 
-        onAudioFrame?(sampleBuffer)
+        if output === videoOutput {
+
+            onFrame?(
+                sampleBuffer,
+                CMTimeGetSeconds(
+                    CMSampleBufferGetPresentationTimeStamp(
+                        sampleBuffer
+                    )
+                )
+            )
+
+        } else if output === audioOutput {
+
+            onAudioFrame?(sampleBuffer)
+        }
     }
 }

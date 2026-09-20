@@ -197,6 +197,8 @@ final class VideoWriter {
                             timingInfo[index].decodeTimeStamp,
                             pausedDuration
                         )
+                }  
+            }          
 
             var newBuffer: CMSampleBuffer?
 

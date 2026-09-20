@@ -27,11 +27,11 @@ final class RecordingSession: ObservableObject {
         cameraRecorder.hasTorch
     }
 
-    var selectedFormat: CameraFormat? {
+    var selectedFormat: CameraFormatOption? {
         cameraRecorder.selectedFormat
     }
 
-    var formatOptions: [CameraFormat] {
+    var formatOptions: [CameraFormatOption] {
         cameraRecorder.formatOptions
     }
 
@@ -85,8 +85,8 @@ final class RecordingSession: ObservableObject {
         cameraRecorder.configure()
     }
 
-    func selectVideoFormat(_ option: CameraFormat) {
-        cameraRecorder.selectVideoFormat(option)
+    func selectVideoFormat(_ option: CameraFormatOption) {
+        cameraRecorder.selectFormat(option)
     }
 
     // MARK: - Audio

@@ -17,6 +17,34 @@ final class RecordingSession: ObservableObject {
     let videoWriter = VideoWriter()
     let metadataWriter = MetadataWriter()
 
+    // MARK: - Compatibility API used by ContentView
+
+    var captureSession: AVCaptureSession {
+        cameraRecorder.captureSession
+    }
+
+    var hasTorch: Bool {
+        cameraRecorder.hasTorch
+    }
+
+    var selectedFormat: CameraFormat? {
+        cameraRecorder.selectedFormat
+    }
+
+    var formatOptions: [CameraFormat] {
+        cameraRecorder.formatOptions
+    }
+
+    var state: RecordingState {
+        if isRecording {
+            return isPaused ? .paused : .recording
+        }
+
+        return .idle
+    }
+
+    var onSensorReading: ((SensorReading) -> Void)?
+
     private var recordingFiles: RecordingFiles?
     private var timer: Timer?
 
@@ -41,20 +69,37 @@ final class RecordingSession: ObservableObject {
 
             self.videoWriter.appendAudio(sampleBuffer)
         }
+
+        sensorManager.onReading = { [weak self] reading in
+            guard let self else {
+                return
+            }
+
+            self.handleSensorReading(reading)
+        }
     }
+
+    // MARK: - Camera
 
     func configure() {
         cameraRecorder.configure()
     }
 
-    func setAudioEnabled(_ enabled: Bool) {
+    func selectVideoFormat(_ option: CameraFormat) {
+        cameraRecorder.selectVideoFormat(option)
+    }
 
+    // MARK: - Audio
+
+    func setAudioEnabled(_ enabled: Bool) {
         guard !isRecording else {
             return
         }
 
         audioEnabled = enabled
     }
+
+    // MARK: - Recording
 
     func start() {
 
@@ -67,14 +112,14 @@ final class RecordingSession: ObservableObject {
             let files = try RecordingFiles()
             recordingFiles = files
 
-            try csvWriter.start(
-                url: files.sensorURL
-            )
-
             guard let format = cameraRecorder.selectedFormat else {
                 print("Recording start failed: Camera format is not ready.")
                 return
             }
+
+            try csvWriter.start(
+                url: files.sensorCSVURL
+            )
 
             try videoWriter.start(
                 url: files.videoURL,
@@ -86,10 +131,10 @@ final class RecordingSession: ObservableObject {
 
             let metadata = RecordingMetadata(
                 appVersion: AppInfo.version,
-                recordingID: files.folder.lastPathComponent,
+                recordingID: files.folderURL.lastPathComponent,
                 sensorFrequencyHz: 100,
                 videoFile: files.videoURL.lastPathComponent,
-                sensorFile: files.sensorURL.lastPathComponent,
+                sensorFile: files.sensorCSVURL.lastPathComponent,
                 createdAt: Date(),
                 videoWidth: format.width,
                 videoHeight: format.height,
@@ -98,28 +143,13 @@ final class RecordingSession: ObservableObject {
             )
 
             try metadataWriter.write(
-                metadata,
+                metadata: metadata,
                 to: files.metadataURL
             )
 
             timeSynchronizer.start()
 
-            sensorManager.start { [weak self] sample in
-
-                guard let self else {
-                    return
-                }
-
-                let timestamp =
-                    self.timeSynchronizer.elapsedTime(
-                        for: sample.sensorTimestamp
-                    )
-
-                self.csvWriter.append(
-                    sample: sample,
-                    timestamp: timestamp
-                )
-            }
+            sensorManager.start()
 
             cameraRecorder.start()
 
@@ -144,7 +174,7 @@ final class RecordingSession: ObservableObject {
             return
         }
 
-        sensorManager.pause()
+        sensorManager.stop()
         videoWriter.pause()
         timeSynchronizer.pause()
 
@@ -158,7 +188,7 @@ final class RecordingSession: ObservableObject {
         }
 
         timeSynchronizer.resume()
-        sensorManager.resume()
+        sensorManager.start()
         videoWriter.resume()
 
         isPaused = false
@@ -181,13 +211,15 @@ final class RecordingSession: ObservableObject {
                 return
             }
 
-            self.csvWriter.finish()
+            csvWriter.finish()
 
-            self.videoWriter.finish { [weak self] _ in
+            videoWriter.finish { [weak self] _ in
 
                 guard let self else {
                     return
                 }
+
+                timeSynchronizer.reset()
 
                 DispatchQueue.main.async {
 
@@ -199,6 +231,26 @@ final class RecordingSession: ObservableObject {
             }
         }
     }
+
+    // MARK: - Sensor Callback
+
+    private func handleSensorReading(
+        _ reading: SensorReading
+    ) {
+
+        guard isRecording else {
+            return
+        }
+
+        onSensorReading?(reading)
+
+        csvWriter.append(
+            sample: reading,
+            timestamp: reading.recordingTime
+        )
+    }
+
+    // MARK: - Timer
 
     private func startTimer() {
 

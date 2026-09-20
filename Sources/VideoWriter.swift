@@ -186,15 +186,17 @@ final class VideoWriter {
             for index in 0..<count {
 
                 timingInfo[index].presentationTimeStamp =
-                    timingInfo[index].presentationTimeStamp
-                    .subtracting(pausedDuration)
+                    CMTimeSubtract(
+                        timingInfo[index].presentationTimeStamp,
+                        pausedDuration
+                    )
 
                 if timingInfo[index].decodeTimeStamp.isValid {
-                    timingInfo[index].decodeTimeStamp =
-                        timingInfo[index].decodeTimeStamp
-                        .subtracting(pausedDuration)
-                }
-            }
+                     timingInfo[index].decodeTimeStamp =
+                        CMTimeSubtract(
+                            timingInfo[index].decodeTimeStamp,
+                            pausedDuration
+                        )
 
             var newBuffer: CMSampleBuffer?
 

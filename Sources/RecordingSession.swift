@@ -23,8 +23,11 @@ final class RecordingSession: ObservableObject {
         cameraRecorder.captureSession
     }
 
-    var hasTorch: Bool {
-        cameraRecorder.hasTorch
+    var torchIsOn = false
+
+    func toggleTorch() {
+        cameraRecorder.toggleTorch()
+        torchIsOn.toggle()
     }
 
     var selectedFormat: CameraFormatOption? {
@@ -117,8 +120,8 @@ final class RecordingSession: ObservableObject {
                 return
             }
 
-            try csvWriter.start(
-                url: files.sensorCSVURL
+            try csvWriter.startRecording(
+                at: files.sensorCSVURL
             )
 
             try videoWriter.start(
@@ -211,7 +214,7 @@ final class RecordingSession: ObservableObject {
                 return
             }
 
-            csvWriter.finish()
+            csvWriter.stopRecording()
 
             videoWriter.finish { [weak self] _ in
 
@@ -244,10 +247,7 @@ final class RecordingSession: ObservableObject {
 
         onSensorReading?(reading)
 
-        csvWriter.append(
-            sample: reading,
-            timestamp: reading.recordingTime
-        )
+        csvWriter.write(reading)
     }
 
     // MARK: - Timer

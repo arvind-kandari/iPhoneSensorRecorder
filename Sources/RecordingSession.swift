@@ -34,6 +34,10 @@ final class RecordingSession: ObservableObject {
         torchIsOn.toggle()
     }
 
+    func switchCamera() {
+        cameraRecorder.switchCamera()
+    }
+
     var selectedFormat: CameraFormatOption? {
         cameraRecorder.selectedFormat
     }

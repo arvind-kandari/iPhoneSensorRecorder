@@ -62,6 +62,8 @@ final class CameraRecorder: NSObject {
     private var cameraPosition: AVCaptureDevice.Position = .back
 
     private var torchIsOn = false
+    private var currentZoom = 1.0
+    private var exposureBias = 0.0
     private var isConfigured = false
     private var deliversFrames = false
 
@@ -79,6 +81,9 @@ final class CameraRecorder: NSObject {
 
     var onCameraChanged:
         ((Bool, Bool, Bool) -> Void)?
+
+    var onCameraControlsChanged:
+        ((Double, Double) -> Void)?
 
     // MARK: - Configuration
 
@@ -245,6 +250,7 @@ final class CameraRecorder: NSObject {
 
             self.reportConfiguration()
             self.reportCamera()
+            self.reportCameraControls()
         }
     }
 
@@ -354,105 +360,60 @@ final class CameraRecorder: NSObject {
                 return
             }
 
-            do {
+            self.replaceCamera(
+                with: newCamera,
+                position: newPosition,
+                zoom: 1.0
+            )
+        }
+    }
 
-                let newInput =
-                    try AVCaptureDeviceInput(
-                        device: newCamera
-                    )
+    func setZoom(_ zoom: Double) {
 
-                let newOptions =
-                    self.supportedOptions(newCamera)
+        sessionQueue.async { [weak self] in
 
-                guard let selected =
-                        newOptions.first(
-                            where: {
-                                $0.width == 1920 &&
-                                $0.height == 1080 &&
-                                $0.fps == 30
-                            }
-                        )
-                        ?? newOptions.first
-                else {
-                    self.fail(
-                        "No supported camera resolution and frame-rate combination is available"
-                    )
-                    return
-                }
-
-                if let error =
-                    self.apply(
-                        selected,
-                        camera: newCamera
-                    ) {
-
-                    self.fail(error)
-                    return
-                }
-
-                let wasRunning =
-                    self.captureSession.isRunning
-
-                if wasRunning {
-                    self.captureSession.stopRunning()
-                }
-
-                self.captureSession.beginConfiguration()
-
-                if let oldCamera = self.camera {
-                    self.setTorch(
-                        false,
-                        on: oldCamera
-                    )
-                }
-
-                let oldInput = self.cameraInput
-
-                if let oldInput {
-                    self.captureSession.removeInput(oldInput)
-                }
-
-                guard self.captureSession.canAddInput(
-                    newInput
-                ) else {
-
-                    if let oldInput {
-                        self.captureSession.addInput(oldInput)
-                    }
-
-                    self.captureSession.commitConfiguration()
-
-                    if wasRunning {
-                        self.captureSession.startRunning()
-                    }
-
-                    self.reportCamera()
-                    return
-                }
-
-                self.captureSession.addInput(newInput)
-
-                self.camera = newCamera
-                self.cameraInput = newInput
-                self.cameraPosition = newPosition
-                self.formatOptions = newOptions
-                self.selectedFormat = selected
-
-                self.captureSession.commitConfiguration()
-
-                if wasRunning {
-                    self.captureSession.startRunning()
-                }
-
-                self.reportConfiguration()
-                self.reportCamera()
-
-            } catch {
-
-                self.fail(
-                    "Camera switch error: \(error.localizedDescription)"
-                )
+            guard let self,
+                  self.isConfigured,
+                  self.cameraPosition == .back,
+                  let targetCamera = self.rearCamera(for: zoom)
+            else {
+                return
             }
+
+            let requestedZoom = self.closestZoom(to: zoom)
+
+            if targetCamera.uniqueID != self.camera?.uniqueID {
+                self.replaceCamera(
+                    with: targetCamera,
+                    position: .back,
+                    zoom: requestedZoom
+                )
+                return
+            }
+
+            self.applyZoom(
+                requestedZoom,
+                to: targetCamera
+            )
+            self.reportCameraControls()
+        }
+    }
+
+    func setExposureBias(_ bias: Double) {
+
+        sessionQueue.async { [weak self] in
+
+            guard let self,
+                  let camera = self.camera
+            else {
+                return
+            }
+
+            self.applyExposureBias(
+                bias,
+                to: camera
+            )
+            self.reportCameraControls()
         }
     }
 
@@ -514,6 +475,160 @@ final class CameraRecorder: NSObject {
         completion()
     }
 }
+
+    private func replaceCamera(
+        with newCamera: AVCaptureDevice,
+        position: AVCaptureDevice.Position,
+        zoom: Double
+    ) {
+
+        do {
+            let newInput = try AVCaptureDeviceInput(device: newCamera)
+            let newOptions = supportedOptions(newCamera)
+            let selected = matchingFormat(from: newOptions)
+
+            guard let selected else {
+                fail("No supported camera resolution and frame-rate combination is available")
+                return
+            }
+
+            if let error = apply(selected, camera: newCamera) {
+                fail(error)
+                return
+            }
+
+            let wasRunning = captureSession.isRunning
+            if wasRunning { captureSession.stopRunning() }
+
+            captureSession.beginConfiguration()
+            if let oldCamera = camera { setTorch(false, on: oldCamera) }
+            let oldInput = cameraInput
+            if let oldInput { captureSession.removeInput(oldInput) }
+
+            guard captureSession.canAddInput(newInput) else {
+                if let oldInput { captureSession.addInput(oldInput) }
+                captureSession.commitConfiguration()
+                if wasRunning { captureSession.startRunning() }
+                reportCamera()
+                return
+            }
+
+            captureSession.addInput(newInput)
+            camera = newCamera
+            cameraInput = newInput
+            cameraPosition = position
+            formatOptions = newOptions
+            selectedFormat = selected
+            applyZoom(zoom, to: newCamera)
+            applyExposureBias(0, to: newCamera)
+            captureSession.commitConfiguration()
+
+            if wasRunning { captureSession.startRunning() }
+            reportConfiguration()
+            reportCamera()
+            reportCameraControls()
+        } catch {
+            fail("Camera switch error: \(error.localizedDescription)")
+        }
+    }
+
+    private func matchingFormat(
+        from options: [CameraFormatOption]
+    ) -> CameraFormatOption? {
+
+        if let selectedFormat,
+           let match = options.first(where: {
+               $0.width == selectedFormat.width &&
+               $0.height == selectedFormat.height &&
+               $0.fps == selectedFormat.fps
+           }) {
+            return match
+        }
+
+        return options.first(where: {
+            $0.width == 1920 &&
+            $0.height == 1080 &&
+            $0.fps == 30
+        }) ?? options.first
+    }
+
+    private func rearCamera(
+        for zoom: Double
+    ) -> AVCaptureDevice? {
+
+        if zoom <= 0.5 {
+            let virtualCamera = AVCaptureDevice.DiscoverySession(
+                deviceTypes: [.builtInDualWideCamera, .builtInTripleCamera],
+                mediaType: .video,
+                position: .back
+            )
+            .devices
+            .first(where: { $0.minAvailableVideoZoomFactor <= 0.5 })
+
+            return virtualCamera
+                ?? AVCaptureDevice.default(
+                    .builtInUltraWideCamera,
+                    for: .video,
+                    position: .back
+                )
+                ?? camera(for: .back)
+        }
+
+        return camera(for: .back)
+    }
+
+    private func closestZoom(
+        to zoom: Double
+    ) -> Double {
+        [0.5, 1.0, 2.0].min(by: {
+            abs($0 - zoom) < abs($1 - zoom)
+        }) ?? 1.0
+    }
+
+    private func applyZoom(
+        _ zoom: Double,
+        to camera: AVCaptureDevice
+    ) {
+
+        do {
+            try camera.lockForConfiguration()
+            defer { camera.unlockForConfiguration() }
+            let desired: CGFloat =
+                camera.deviceType == .builtInUltraWideCamera
+                ? 1.0
+                : CGFloat(zoom)
+            let factor = min(
+                max(desired, camera.minAvailableVideoZoomFactor),
+                camera.maxAvailableVideoZoomFactor
+            )
+            camera.videoZoomFactor = factor
+            currentZoom =
+                camera.deviceType == .builtInUltraWideCamera
+                ? 0.5
+                : Double(factor)
+        } catch {
+            currentZoom = 1.0
+        }
+    }
+
+    private func applyExposureBias(
+        _ bias: Double,
+        to camera: AVCaptureDevice
+    ) {
+
+        do {
+            try camera.lockForConfiguration()
+            defer { camera.unlockForConfiguration() }
+            let clamped = min(
+                max(Float(bias), camera.minExposureTargetBias),
+                camera.maxExposureTargetBias
+            )
+            camera.setExposureTargetBias(clamped, completionHandler: nil)
+            exposureBias = Double(clamped)
+        } catch {
+            exposureBias = 0
+        }
+    }
 
     // MARK: - Supported Formats
 
@@ -744,6 +859,13 @@ final class CameraRecorder: NSObject {
             cameraPosition == .front,
             camera?.hasTorch == true,
             torchIsOn
+        )
+    }
+
+    private func reportCameraControls() {
+        onCameraControlsChanged?(
+            currentZoom,
+            exposureBias
         )
     }
 }

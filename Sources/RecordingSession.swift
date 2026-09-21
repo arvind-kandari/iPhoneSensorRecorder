@@ -8,6 +8,8 @@ final class RecordingSession: ObservableObject {
     @Published var isPaused = false
     @Published var elapsedTime: TimeInterval = 0
     @Published var audioEnabled = true
+    @Published private(set) var currentZoom = 1.0
+    @Published private(set) var exposureBias = 0.0
 
     let cameraRecorder = CameraRecorder()
     let timeSynchronizer = TimeSynchronizer()
@@ -23,19 +25,38 @@ final class RecordingSession: ObservableObject {
         cameraRecorder.captureSession
     }
 
-    var hasTorch: Bool {
-        true
-    }
-
-    var torchIsOn = false
+    @Published private(set) var hasTorch = false
+    @Published private(set) var torchIsOn = false
+    @Published private(set) var isFrontCamera = false
 
     func toggleTorch() {
+        guard !isRecording, !isPaused, hasTorch else {
+            return
+        }
         cameraRecorder.toggleTorch()
-        torchIsOn.toggle()
     }
 
     func switchCamera() {
+        guard !isRecording, !isPaused else {
+            return
+        }
         cameraRecorder.switchCamera()
+    }
+
+    func setZoom(_ zoom: Double) {
+        guard !isRecording, !isPaused, !isFrontCamera else {
+            return
+        }
+        currentZoom = zoom
+        cameraRecorder.setZoom(zoom)
+    }
+
+    func setExposureBias(_ bias: Double) {
+        guard !isRecording, !isPaused else {
+            return
+        }
+        exposureBias = bias
+        cameraRecorder.setExposureBias(bias)
     }
 
     var selectedFormat: CameraFormatOption? {
@@ -78,6 +99,21 @@ final class RecordingSession: ObservableObject {
             }
 
             self.videoWriter.appendAudio(sampleBuffer)
+        }
+
+        cameraRecorder.onCameraChanged = { [weak self] isFront, hasTorch, torchIsOn in
+            DispatchQueue.main.async {
+                self?.isFrontCamera = isFront
+                self?.hasTorch = hasTorch
+                self?.torchIsOn = torchIsOn
+            }
+        }
+
+        cameraRecorder.onCameraControlsChanged = { [weak self] zoom, bias in
+            DispatchQueue.main.async {
+                self?.currentZoom = zoom
+                self?.exposureBias = bias
+            }
         }
 
         sensorManager.onReading = { [weak self] reading in

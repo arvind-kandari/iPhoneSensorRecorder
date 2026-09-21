@@ -130,6 +130,10 @@ struct ContentView: View {
                         recordingSession.state == .paused {
                         recordingBadge
                     }
+
+                    zoomControls
+                        .padding(.top, 18)
+                        .padding(.bottom, 118)
                 }
                 .frame(
                     width: proxy.size.width,
@@ -137,6 +141,17 @@ struct ContentView: View {
                 )
                 .padding(.horizontal, 20)
                 .padding(.top, 12)
+
+                HStack {
+                    Spacer()
+                    exposureControl
+                        .padding(.trailing, 14)
+                        .padding(.bottom, 190)
+                }
+                .frame(
+                    width: proxy.size.width,
+                    height: proxy.size.height
+                )
             }
             .frame(
                 width: proxy.size.width,
@@ -213,6 +228,68 @@ struct ContentView: View {
             .black.opacity(0.6),
             in: Capsule()
         )
+    }
+
+    private var zoomControls: some View {
+        HStack(spacing: 18) {
+            zoomButton(0.5, title: "0.5x")
+            zoomButton(1.0, title: "1x")
+            zoomButton(2.0, title: "2x")
+        }
+        .disabled(
+            recordingSession.state != .ready ||
+            recordingSession.isFrontCamera
+        )
+        .opacity(
+            recordingSession.state == .ready &&
+            !recordingSession.isFrontCamera
+                ? 1
+                : 0.55
+        )
+    }
+
+    private var exposureControl: some View {
+        GeometryReader { proxy in
+            let range = 4.0
+            let normalized = (recordingSession.exposureBias + 2.0) / range
+            let travel = max(0, proxy.size.height - 42)
+
+            ZStack {
+                Capsule()
+                    .fill(.white.opacity(0.5))
+                    .frame(width: 2)
+
+                Image(systemName: "sun.max.fill")
+                    .font(.title3)
+                    .foregroundStyle(.yellow)
+                    .offset(y: travel / 2 - normalized * travel)
+
+                Rectangle()
+                    .fill(.clear)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { value in
+                                let fraction = min(
+                                    max(1 - value.location.y / proxy.size.height, 0),
+                                    1
+                                )
+                                recordingSession.setExposureBias(
+                                    fraction * range - 2.0
+                                )
+                            }
+                    )
+            }
+        }
+        .frame(width: 42, height: 150)
+        .overlay(alignment: .bottom) {
+            Text(String(format: "%+.1f", recordingSession.exposureBias))
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.white)
+                .offset(y: 22)
+        }
+        .disabled(recordingSession.state != .ready)
+        .opacity(recordingSession.state == .ready ? 1 : 0.55)
     }
 
     // MARK: - Sensor Overlay
@@ -471,6 +548,30 @@ struct ContentView: View {
         return Text(
             "\(label)  X \(xText)  Y \(yText)  Z \(zText)"
         )
+    }
+
+    private func zoomButton(
+        _ zoom: Double,
+        title: String
+    ) -> some View {
+        Button {
+            recordingSession.setZoom(zoom)
+        } label: {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    .white.opacity(
+                        abs(recordingSession.currentZoom - zoom) < 0.15
+                            ? 0.3
+                            : 0
+                    ),
+                    in: Capsule()
+                )
+        }
+        .buttonStyle(.plain)
     }
 }
 

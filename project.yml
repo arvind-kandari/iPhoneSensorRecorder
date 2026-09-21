@@ -26,5 +26,5 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.arvindkandari.iPhoneSensorRecorder
         MARKETING_VERSION: "0.4"
-        GENERATE_INFOPLIST_FILE: YES
+        GENERATE_INFOPLIST_FILE: NO
         SWIFT_VERSION: "5.0"

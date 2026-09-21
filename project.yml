@@ -21,6 +21,8 @@ targets:
         CFBundleDisplayName: SensorSync Recorder
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
 
     settings:
       base:

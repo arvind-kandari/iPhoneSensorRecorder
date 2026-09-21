@@ -62,6 +62,7 @@ final class CameraRecorder: NSObject {
     private var cameraPosition: AVCaptureDevice.Position = .back
 
     private var torchIsOn = false
+    private var selectedZoom = 1.0
     private var currentZoom = 1.0
     private var exposureBias = 0.0
     private var isConfigured = false
@@ -331,8 +332,10 @@ final class CameraRecorder: NSObject {
             self.captureSession.commitConfiguration()
 
             self.selectedFormat = option
+            self.applyZoom(self.selectedZoom, to: camera)
 
             self.reportConfiguration()
+            self.reportCameraControls()
         }
     }
 
@@ -360,6 +363,7 @@ final class CameraRecorder: NSObject {
                 return
             }
 
+            self.selectedZoom = 1.0
             self.replaceCamera(
                 with: newCamera,
                 position: newPosition,
@@ -381,6 +385,7 @@ final class CameraRecorder: NSObject {
             }
 
             let requestedZoom = self.closestZoom(to: zoom)
+            self.selectedZoom = requestedZoom
 
             if targetCamera.uniqueID != self.camera?.uniqueID {
                 self.replaceCamera(
@@ -478,9 +483,20 @@ final class CameraRecorder: NSObject {
 
     func start() {
 
-        deliveryLock.lock()
-        deliversFrames = true
-        deliveryLock.unlock()
+        sessionQueue.async { [weak self] in
+            guard let self else {
+                return
+            }
+
+            if let camera = self.camera {
+                self.applyZoom(self.selectedZoom, to: camera)
+                self.reportCameraControls()
+            }
+
+            self.deliveryLock.lock()
+            self.deliversFrames = true
+            self.deliveryLock.unlock()
+        }
     }
 
     func stop(

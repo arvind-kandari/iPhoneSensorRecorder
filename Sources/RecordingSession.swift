@@ -50,8 +50,7 @@ final class RecordingSession: ObservableObject {
         if isRecording {
             return isPaused ? .paused : .recording
         }
-
-        return .idle
+        return .ready
     }
 
     var onSensorReading: ((SensorReading) -> Void)?

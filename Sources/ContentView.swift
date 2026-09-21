@@ -75,57 +75,76 @@ struct ContentView: View {
         }
     }
 
+
+
     // MARK: - Record View
 
     private var recordView: some View {
-        ZStack {
-            Color.black
-             .ignoresSafeArea()
+        GeometryReader { proxy in
+            ZStack {
+                Color.black
+                    .ignoresSafeArea()
 
-            CameraPreview(
-                session: recordingSession.captureSession
+                CameraPreview(
+                    session: recordingSession.captureSession
+                )
+                .frame(
+                    width: proxy.size.width,
+                    height: proxy.size.height
+                )
+                .clipped()
+                .ignoresSafeArea()
+
+                LinearGradient(
+                    colors: [
+                        .black.opacity(0.55),
+                        .clear,
+                        .black.opacity(0.75)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(
+                    width: proxy.size.width,
+                    height: proxy.size.height
+                )
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+
+                VStack(spacing: 0) {
+                    topControls
+
+                    Spacer()
+
+                    if showSensorOverlay {
+                        sensorOverlay
+                    }
+
+                    Spacer()
+
+                    if recordingSession.state == .recording ||
+                        recordingSession.state == .paused {
+                        recordingBadge
+                    }
+
+                    cameraControls
+                        .padding(.top, 18)
+                        .padding(.bottom, 24)
+                }
+                .frame(
+                    width: proxy.size.width,
+                    height: proxy.size.height
+                )
+                .padding(.horizontal, 20)
+                .padding(.top, 12)
+            }
+            .frame(
+                width: proxy.size.width,
+                height: proxy.size.height
             )
             .ignoresSafeArea()
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipped()
-
-            LinearGradient(
-                colors: [
-                    .black.opacity(0.65),
-                    .clear,
-                    .black.opacity(0.8)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-             .ignoresSafeArea()
-
-             VStack(spacing: 0) {
-                topControls
-
-                Spacer()
-
-                if showSensorOverlay {
-                    sensorOverlay
-                }
-
-                Spacer()
-
-                if recordingSession.state == .recording ||
-                    recordingSession.state == .paused {
-                    recordingBadge
-                }
-
-                cameraControls
-                    .padding(.top, 18)
-                    .padding(.bottom, 24)
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 12)
         }
-        .ignoresSafeArea()
     }
-
     // MARK: - Top Controls
 
     private var topControls: some View {

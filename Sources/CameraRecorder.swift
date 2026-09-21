@@ -481,25 +481,7 @@ final class CameraRecorder: NSObject {
     // MARK: - Recording
 
     func recordingTransform() -> CGAffineTransform {
-
-        switch UIDevice.current.orientation {
-
-        case .landscapeLeft:
-            return CGAffineTransform(rotationAngle: .pi)
-
-        case .portraitUpsideDown:
-            return CGAffineTransform(
-                rotationAngle: -.pi / 2
-            )
-
-        case .landscapeRight:
-            return .identity
-
-        default:
-            return CGAffineTransform(
-                rotationAngle: .pi / 2
-            )
-        }
+        CGAffineTransform(rotationAngle: .pi / 2)
     }
 
     func start() {

@@ -265,52 +265,80 @@ struct ContentView: View {
         )
     }
 
-    // MARK: - Camera Controls
-
     @ViewBuilder
     private var cameraControls: some View {
         switch recordingSession.state {
 
         case .recording:
-            HStack(spacing: 48) {
-                Button(action: recordingSession.pause) {
+            HStack(spacing: 28) {
+
+                // PAUSE
+                Button {
+                    DispatchQueue.main.async {
+                        recordingSession.pause()
+                    }
+                } label: {
                     Image(systemName: "pause.fill")
-                        .font(.system(size: 24, weight: .medium))
+                        .font(.system(size: 24, weight: .bold))
                         .foregroundStyle(.white)
+                        .frame(width: 64, height: 64)
+                        .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
 
+                // STOP
                 Button {
-                    recordingSession.stop()
+                    DispatchQueue.main.async {
+                        recordingSession.stop()
+                    }
                 } label: {
                     Image(systemName: "stop.fill")
-                        .font(.system(size: 24, weight: .medium))
+                        .font(.system(size: 24, weight: .bold))
                         .foregroundStyle(.red)
+                        .frame(width: 64, height: 64)
+                        .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
             }
 
         case .paused:
-            HStack(spacing: 48) {
-                Button(action: recordingSession.resume) {
+            HStack(spacing: 28) {
+
+                // RESUME
+                Button {
+                    DispatchQueue.main.async {
+                        recordingSession.resume()
+                    }
+                } label: {
                     Image(systemName: "play.fill")
-                        .font(.system(size: 24, weight: .medium))
+                        .font(.system(size: 24, weight: .bold))
                         .foregroundStyle(.white)
+                        .frame(width: 64, height: 64)
+                        .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
 
+                // STOP
                 Button {
-                    recordingSession.stop()
+                    DispatchQueue.main.async {
+                        recordingSession.stop()
+                    }
                 } label: {
                     Image(systemName: "stop.fill")
-                        .font(.system(size: 24, weight: .medium))
+                        .font(.system(size: 24, weight: .bold))
                         .foregroundStyle(.red)
+                        .frame(width: 64, height: 64)
+                        .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
             }
 
         default:
-            Button(action: recordingSession.start) {
+            Button {
+                DispatchQueue.main.async {
+                    recordingSession.start()
+                }
+            } label: {
                 Circle()
                     .stroke(.white, lineWidth: 4)
                     .frame(width: 76, height: 76)
@@ -319,6 +347,7 @@ struct ContentView: View {
                             .fill(.red)
                             .padding(7)
                     }
+                    .contentShape(Circle())
             }
             .buttonStyle(.plain)
             .disabled(recordingSession.state != .ready)

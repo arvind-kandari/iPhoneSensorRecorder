@@ -98,6 +98,7 @@ struct ContentView: View {
                 )
                 .clipped()
                 .ignoresSafeArea()
+                .allowsHitTesting(false)
 
                 LinearGradient(
                     colors: [
@@ -134,6 +135,7 @@ struct ContentView: View {
                     zoomControls
                         .padding(.top, 18)
                         .padding(.bottom, 118)
+                        .zIndex(1)
                 }
                 .frame(
                     width: proxy.size.width,
@@ -560,8 +562,7 @@ struct ContentView: View {
             Text(title)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.white)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
+                .frame(minWidth: 44, minHeight: 44)
                 .background(
                     .white.opacity(
                         abs(recordingSession.currentZoom - zoom) < 0.15
@@ -570,6 +571,7 @@ struct ContentView: View {
                     ),
                     in: Capsule()
                 )
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }

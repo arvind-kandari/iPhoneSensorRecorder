@@ -184,12 +184,12 @@ struct ContentView: View {
         Button(action: action) {
             VStack(spacing: 5) {
                 Image(systemName: symbol)
-                    .font(.system(size: 25, weight: .semibold))
+                    .font(.system(size: 21, weight: .semibold))
 
                 Text(title)
-                    .font(.caption.weight(.semibold))
+                    .font(.caption2.weight(.semibold))
             }
-            .frame(width: 92)
+            .frame(width: 78)
             .foregroundStyle(active ? .red : .white)
         }
         .buttonStyle(.plain)
@@ -206,8 +206,8 @@ struct ContentView: View {
                             ? "bolt.fill"
                             : "bolt.slash.fill"
                     )
-                    .font(.system(size: 30, weight: .medium))
-                    .frame(width: 48, height: 48)
+                    .font(.system(size: 24, weight: .medium))
+                    .frame(width: 40, height: 40)
                 }
                 .disabled(recordingSession.state != .ready)
             }
@@ -218,8 +218,8 @@ struct ContentView: View {
                 showSettings = true
             } label: {
                 Image(systemName: "gearshape")
-                    .font(.system(size: 30, weight: .medium))
-                    .frame(width: 48, height: 48)
+                    .font(.system(size: 24, weight: .medium))
+                    .frame(width: 40, height: 40)
             }
             .disabled(
                 recordingSession.state == .recording ||
@@ -352,11 +352,11 @@ struct ContentView: View {
             Button(action: recordingSession.start) {
                 Circle()
                     .stroke(.white, lineWidth: 6)
-                    .frame(width: 96, height: 96)
+                    .frame(width: 76, height: 76)
                     .overlay(
                         Circle()
                             .fill(.red)
-                            .padding(9)
+                            .padding(7)
                     )
             }
             .buttonStyle(.plain)

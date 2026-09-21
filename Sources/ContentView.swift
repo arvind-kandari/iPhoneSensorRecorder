@@ -54,6 +54,8 @@ struct ContentView: View {
             }
             .ignoresSafeArea(.keyboard)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea()
         .tint(.red)
         .preferredColorScheme(.dark)
         .onAppear {
@@ -98,8 +100,8 @@ struct ContentView: View {
                     onFocusTap: handleFocusTap
                 )
                 .frame(
-                    width: proxy.size.width,
-                    height: proxy.size.height
+                    maxWidth: .infinity,
+                    maxHeight: .infinity
                 )
                 .clipped()
                 .ignoresSafeArea()
@@ -478,14 +480,16 @@ struct ContentView: View {
             } label: {
                 Circle()
                     .stroke(.white, lineWidth: 4)
-                    .frame(width: 76, height: 76)
+                    .frame(width: 64, height: 64)
                     .overlay {
                         Circle()
                             .fill(.red)
-                            .padding(7)
+                            .padding(5)
                     }
                     .contentShape(Circle())
             }
+            .frame(width: 64, height: 64)
+            .contentShape(Circle())
             .buttonStyle(.plain)
             .disabled(recordingSession.state != .ready)
             .opacity(

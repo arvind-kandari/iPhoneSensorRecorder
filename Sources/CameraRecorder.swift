@@ -488,10 +488,7 @@ final class CameraRecorder: NSObject {
                 return
             }
 
-            if let camera = self.camera {
-                self.applyZoom(self.selectedZoom, to: camera)
-                self.reportCameraControls()
-            }
+            self.logRecordingStartState()
 
             self.deliveryLock.lock()
             self.deliversFrames = true
@@ -914,6 +911,26 @@ final class CameraRecorder: NSObject {
             currentZoom,
             exposureBias
         )
+    }
+
+    private func logRecordingStartState() {
+        guard let camera else {
+            print("RECORD START: camera unavailable")
+            return
+        }
+
+        let dimensions = CMVideoFormatDescriptionGetDimensions(
+            camera.activeFormat.formatDescription
+        )
+
+        print("RECORD START")
+        print("camera position:", camera.position.rawValue)
+        print("camera type:", camera.deviceType.rawValue)
+        print("camera input:", cameraInput?.device.uniqueID ?? "none")
+        print("selectedZoom:", selectedZoom)
+        print("videoZoomFactor:", camera.videoZoomFactor)
+        print("activeFormat:", "\(dimensions.width)x\(dimensions.height)")
+        print("videoFieldOfView:", camera.activeFormat.videoFieldOfView)
     }
 }
 

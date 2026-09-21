@@ -67,6 +67,7 @@ final class CameraRecorder: NSObject {
     private var exposureBias = 0.0
     private var isConfigured = false
     private var deliversFrames = false
+    private var shouldLogFirstVideoFrame = false
 
     private(set) var formatOptions: [CameraFormatOption] = []
     private(set) var selectedFormat: CameraFormatOption?
@@ -333,6 +334,7 @@ final class CameraRecorder: NSObject {
 
             self.selectedFormat = option
             self.applyZoom(self.selectedZoom, to: camera)
+            self.logCameraState("[ZOOM DEBUG] AFTER FORMAT")
 
             self.reportConfiguration()
             self.reportCameraControls()
@@ -492,7 +494,10 @@ final class CameraRecorder: NSObject {
 
             self.deliveryLock.lock()
             self.deliversFrames = true
+            self.shouldLogFirstVideoFrame = true
             self.deliveryLock.unlock()
+
+            self.logCameraState("[ZOOM DEBUG] AFTER CAMERA START")
         }
     }
 
@@ -568,6 +573,7 @@ final class CameraRecorder: NSObject {
             captureSession.commitConfiguration()
 
             if wasRunning { captureSession.startRunning() }
+            logCameraState("[ZOOM DEBUG] AFTER INPUT")
             reportConfiguration()
             reportCamera()
             reportCameraControls()
@@ -913,9 +919,40 @@ final class CameraRecorder: NSObject {
         )
     }
 
+    func logCameraStateBeforeRecording() {
+        sessionQueue.sync {
+            let separator = [
+                "==============================",
+                "RECORDING TEST START",
+                "=============================="
+            ]
+            separator.forEach { print($0) }
+            appendZoomDebugLines(separator)
+            logCameraState("[ZOOM DEBUG] BEFORE RECORD")
+        }
+    }
+
+    func logCameraStateAfterVideoWriterStart() {
+        sessionQueue.async { [weak self] in
+            self?.logCameraState("[ZOOM DEBUG] AFTER VIDEO WRITER")
+        }
+    }
+
+    func logCameraStateBeforeCameraStart() {
+        sessionQueue.async { [weak self] in
+            self?.logCameraState("[ZOOM DEBUG] BEFORE CAMERA START")
+        }
+    }
+
     private func logRecordingStartState() {
+        logCameraState("RECORD START")
+    }
+
+    private func logCameraState(_ label: String) {
         guard let camera else {
-            print("RECORD START: camera unavailable")
+            let line = "\(label): camera unavailable"
+            print(line)
+            appendZoomDebugLines([line])
             return
         }
 
@@ -923,14 +960,52 @@ final class CameraRecorder: NSObject {
             camera.activeFormat.formatDescription
         )
 
-        print("RECORD START")
-        print("camera position:", camera.position.rawValue)
-        print("camera type:", camera.deviceType.rawValue)
-        print("camera input:", cameraInput?.device.uniqueID ?? "none")
-        print("selectedZoom:", selectedZoom)
-        print("videoZoomFactor:", camera.videoZoomFactor)
-        print("activeFormat:", "\(dimensions.width)x\(dimensions.height)")
-        print("videoFieldOfView:", camera.activeFormat.videoFieldOfView)
+        let lines = [
+            label,
+            "camera position: \(camera.position.rawValue)",
+            "camera type: \(camera.deviceType.rawValue)",
+            "camera input: \(camera.uniqueID)",
+            "selectedZoom: \(selectedZoom)",
+            "videoZoomFactor: \(camera.videoZoomFactor)",
+            "minVideoZoomFactor: \(camera.minAvailableVideoZoomFactor)",
+            "maxVideoZoomFactor: \(camera.maxAvailableVideoZoomFactor)",
+            "activeFormat: \(dimensions.width)x\(dimensions.height)",
+            "videoFieldOfView: \(camera.activeFormat.videoFieldOfView)"
+        ]
+
+        lines.forEach { print($0) }
+        appendZoomDebugLines(lines)
+    }
+
+    private func appendZoomDebugLines(_ lines: [String]) {
+        guard let documentsURL = FileManager.default.urls(
+            for: .documentDirectory,
+            in: .userDomainMask
+        ).first else {
+            print("[ZOOM DEBUG] Documents directory unavailable")
+            return
+        }
+
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        let text = lines
+            .map { "\(timestamp) \($0)" }
+            .joined(separator: "\n") + "\n"
+        let fileURL = documentsURL.appendingPathComponent("zoom_debug.log")
+
+        do {
+            if !FileManager.default.fileExists(atPath: fileURL.path) {
+                try Data(text.utf8).write(to: fileURL, options: .atomic)
+                return
+            }
+
+            let handle = try FileHandle(forWritingTo: fileURL)
+            defer { try? handle.close() }
+            try handle.seekToEnd()
+            try handle.write(contentsOf: Data(text.utf8))
+            try handle.synchronize()
+        } catch {
+            print("[ZOOM DEBUG] File write failed:", error.localizedDescription)
+        }
     }
 }
 
@@ -961,6 +1036,17 @@ extension CameraRecorder:
         }
 
         if output === videoOutput {
+
+            deliveryLock.lock()
+            let shouldLogFirstFrame = shouldLogFirstVideoFrame
+            shouldLogFirstVideoFrame = false
+            deliveryLock.unlock()
+
+            if shouldLogFirstFrame {
+                sessionQueue.async { [weak self] in
+                    self?.logCameraState("[ZOOM DEBUG] FIRST FRAME")
+                }
+            }
 
             onFrame?(
                 sampleBuffer,

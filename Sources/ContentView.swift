@@ -25,6 +25,10 @@ struct ContentView: View {
     @State private var showSettings = false
     @State private var showRecordings = false
     @State private var showSensorOverlay = false
+    @State private var focusPoint: CGPoint?
+    @State private var showsFocusIndicator = false
+    @State private var exposureDragStartBias: Double?
+    @State private var focusDismissWorkItem: DispatchWorkItem?
 
     var body: some View {
         Group {
@@ -90,7 +94,8 @@ struct ContentView: View {
                     .ignoresSafeArea()
 
                 CameraPreview(
-                    session: recordingSession.captureSession
+                    session: recordingSession.captureSession,
+                    onFocusTap: handleFocusTap
                 )
                 .frame(
                     width: proxy.size.width,
@@ -98,7 +103,6 @@ struct ContentView: View {
                 )
                 .clipped()
                 .ignoresSafeArea()
-                .allowsHitTesting(false)
 
                 LinearGradient(
                     colors: [
@@ -143,17 +147,21 @@ struct ContentView: View {
                 )
                 .padding(.horizontal, 20)
                 .padding(.top, 12)
+                .zIndex(3)
 
-                HStack {
-                    Spacer()
-                    exposureControl
-                        .padding(.trailing, 14)
-                        .padding(.bottom, 190)
+                if let focusPoint {
+                    focusSquare(at: focusPoint)
+                        .opacity(showsFocusIndicator ? 1 : 0)
+                        .allowsHitTesting(false)
+
+                    focusExposureControl(
+                        at: focusPoint,
+                        in: proxy.size
+                    )
+                    .opacity(showsFocusIndicator ? 1 : 0)
+                    .allowsHitTesting(showsFocusIndicator)
+                    .zIndex(2)
                 }
-                .frame(
-                    width: proxy.size.width,
-                    height: proxy.size.height
-                )
             }
             .frame(
                 width: proxy.size.width,
@@ -250,48 +258,98 @@ struct ContentView: View {
         )
     }
 
-    private var exposureControl: some View {
-        GeometryReader { proxy in
-            let range = 4.0
-            let normalized = (recordingSession.exposureBias + 2.0) / range
-            let travel = max(0, proxy.size.height - 42)
-
-            ZStack {
-                Capsule()
-                    .fill(.white.opacity(0.5))
-                    .frame(width: 2)
-
-                Image(systemName: "sun.max.fill")
-                    .font(.title3)
+    private func focusSquare(at point: CGPoint) -> some View {
+        Rectangle()
+            .stroke(.yellow, lineWidth: 2)
+            .frame(width: 62, height: 62)
+            .overlay {
+                Image(systemName: "plus")
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(.yellow)
-                    .offset(y: travel / 2 - normalized * travel)
+            }
+            .position(point)
+    }
 
-                Rectangle()
-                    .fill(.clear)
-                    .contentShape(Rectangle())
-                    .gesture(
-                        DragGesture(minimumDistance: 0)
-                            .onChanged { value in
-                                let fraction = min(
-                                    max(1 - value.location.y / proxy.size.height, 0),
-                                    1
-                                )
-                                recordingSession.setExposureBias(
-                                    fraction * range - 2.0
-                                )
-                            }
+    private func focusExposureControl(
+        at focusPoint: CGPoint,
+        in size: CGSize
+    ) -> some View {
+        let lineHeight: CGFloat = 120
+        let controlPoint = CGPoint(
+            x: min(max(focusPoint.x + 52, 22), size.width - 22),
+            y: min(max(focusPoint.y, lineHeight / 2), size.height - lineHeight / 2)
+        )
+        let normalizedBias = min(
+            max((recordingSession.exposureBias + 2) / 4, 0),
+            1
+        )
+        let sunOffset = (0.5 - normalizedBias) * (lineHeight - 28)
+
+        return ZStack {
+            Capsule()
+                .fill(.yellow)
+                .frame(width: 2, height: lineHeight)
+
+            Image(systemName: "sun.max.fill")
+                .font(.title3)
+                .foregroundStyle(.yellow)
+                .offset(y: sunOffset)
+        }
+        .frame(width: 44, height: lineHeight)
+        .contentShape(Rectangle())
+        .position(controlPoint)
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    focusDismissWorkItem?.cancel()
+                    showsFocusIndicator = true
+
+                    if exposureDragStartBias == nil {
+                        exposureDragStartBias = recordingSession.exposureBias
+                    }
+
+                    recordingSession.setExposureBias(
+                        (exposureDragStartBias ?? 0) -
+                            Double(value.translation.height) / 60
                     )
+                }
+                .onEnded { _ in
+                    exposureDragStartBias = nil
+                    scheduleFocusDismissal()
+                }
+        )
+        .disabled(recordingSession.state != .ready)
+    }
+
+    private func handleFocusTap(
+        _ displayPoint: CGPoint,
+        _ normalizedPoint: CGPoint
+    ) {
+        focusDismissWorkItem?.cancel()
+        focusPoint = displayPoint
+
+        withAnimation(.easeOut(duration: 0.15)) {
+            showsFocusIndicator = true
+        }
+
+        recordingSession.focus(at: normalizedPoint)
+        scheduleFocusDismissal()
+    }
+
+    private func scheduleFocusDismissal() {
+        focusDismissWorkItem?.cancel()
+
+        let item = DispatchWorkItem {
+            withAnimation(.easeOut(duration: 0.2)) {
+                showsFocusIndicator = false
             }
         }
-        .frame(width: 42, height: 150)
-        .overlay(alignment: .bottom) {
-            Text(String(format: "%+.1f", recordingSession.exposureBias))
-                .font(.caption2.monospacedDigit())
-                .foregroundStyle(.white)
-                .offset(y: 22)
-        }
-        .disabled(recordingSession.state != .ready)
-        .opacity(recordingSession.state == .ready ? 1 : 0.55)
+
+        focusDismissWorkItem = item
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + 1,
+            execute: item
+        )
     }
 
     // MARK: - Sensor Overlay

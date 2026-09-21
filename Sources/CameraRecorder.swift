@@ -417,6 +417,37 @@ final class CameraRecorder: NSObject {
         }
     }
 
+    func focus(at normalizedPoint: CGPoint) {
+
+        sessionQueue.async { [weak self] in
+
+            guard let self,
+                  let camera = self.camera,
+                  camera.isFocusPointOfInterestSupported
+            else {
+                return
+            }
+
+            do {
+                try camera.lockForConfiguration()
+                defer { camera.unlockForConfiguration() }
+
+                camera.focusPointOfInterest = CGPoint(
+                    x: min(max(normalizedPoint.x, 0), 1),
+                    y: min(max(normalizedPoint.y, 0), 1)
+                )
+
+                if camera.isFocusModeSupported(.continuousAutoFocus) {
+                    camera.focusMode = .continuousAutoFocus
+                } else if camera.isFocusModeSupported(.autoFocus) {
+                    camera.focusMode = .autoFocus
+                }
+            } catch {
+                return
+            }
+        }
+    }
+
     // MARK: - Torch
 
     func toggleTorch() {

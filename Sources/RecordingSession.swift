@@ -59,6 +59,10 @@ final class RecordingSession: ObservableObject {
         cameraRecorder.setExposureBias(bias)
     }
 
+    func focus(at normalizedPoint: CGPoint) {
+        cameraRecorder.focus(at: normalizedPoint)
+    }
+
     var selectedFormat: CameraFormatOption? {
         cameraRecorder.selectedFormat
     }

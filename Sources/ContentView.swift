@@ -23,6 +23,7 @@ struct ContentView: View {
     )
 
     @State private var showSettings = false
+    @State private var showRecordings = false
     @State private var showSensorOverlay = false
 
     var body: some View {
@@ -36,43 +37,31 @@ struct ContentView: View {
     }
 
     private var activatedContent: some View {
-        TabView {
-            recordView
-                .tabItem {
-                    Label("Record", systemImage: "record.circle")
+        recordView
+            .tint(.red)
+            .preferredColorScheme(.dark)
+            .onAppear {
+                recordingSession.onSensorReading = { reading in
+                    DispatchQueue.main.async {
+                        sensorReading = reading
+                    }
                 }
 
-            RecordingsView()
-                .tabItem {
-                    Label("Recordings", systemImage: "folder")
-                }
-
-            AboutView(licenseManager: licenseManager)
-                .tabItem {
-                    Label("About", systemImage: "info.circle")
-                }
-        }
-        .tint(.red)
-        .preferredColorScheme(.dark)
-        .onAppear {
-            recordingSession.onSensorReading = { reading in
-                DispatchQueue.main.async {
-                    sensorReading = reading
-                }
+                recordingSession.configure()
             }
-
-            recordingSession.configure()
-        }
-        .onReceive(
-            NotificationCenter.default.publisher(
-                for: UIApplication.willEnterForegroundNotification
-            )
-        ) { _ in
-            licenseManager.refreshValidity()
-        }
-        .sheet(isPresented: $showSettings) {
-            VideoSettingsView(session: recordingSession)
-        }
+            .onReceive(
+                NotificationCenter.default.publisher(
+                    for: UIApplication.willEnterForegroundNotification
+                )
+            ) { _ in
+                licenseManager.refreshValidity()
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView(
+                    session: recordingSession,
+                    licenseManager: licenseManager
+                )
+            }
     }
 
 
@@ -99,7 +88,7 @@ struct ContentView: View {
                     colors: [
                         .black.opacity(0.55),
                         .clear,
-                        .black.opacity(0.75)
+                        .black.opacity(0.78)
                     ],
                     startPoint: .top,
                     endPoint: .bottom
@@ -118,6 +107,7 @@ struct ContentView: View {
 
                     if showSensorOverlay {
                         sensorOverlay
+                            .padding(.horizontal, 20)
                     }
 
                     Spacer()
@@ -125,18 +115,15 @@ struct ContentView: View {
                     if recordingSession.state == .recording ||
                         recordingSession.state == .paused {
                         recordingBadge
+                            .padding(.bottom, 12)
                     }
 
-                    cameraControls
-                        .padding(.top, 18)
-                        .padding(.bottom, 24)
+                    cameraFooter
                 }
                 .frame(
                     width: proxy.size.width,
                     height: proxy.size.height
                 )
-                .padding(.horizontal, 20)
-                .padding(.top, 12)
             }
             .frame(
                 width: proxy.size.width,
@@ -145,10 +132,73 @@ struct ContentView: View {
             .ignoresSafeArea()
         }
     }
+
+    // MARK: - Camera Footer
+
+    @ViewBuilder
+    private var cameraFooter: some View {
+        ZStack {
+            HStack {
+                footerNavigationButton(
+                    symbol: "record.circle",
+                    title: "Record",
+                    active: true
+                ) { }
+
+                Spacer()
+
+                footerNavigationButton(
+                    symbol: "folder",
+                    title: "Recordings"
+                ) {
+                    showRecordings = true
+                }
+            }
+            .padding(.horizontal, 28)
+
+            cameraControls
+        }
+        .frame(height: 118)
+        .background(
+            LinearGradient(
+                colors: [
+                    .clear,
+                    .black.opacity(0.28),
+                    .black.opacity(0.62)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+        .sheet(isPresented: $showRecordings) {
+            RecordingsView()
+        }
+    }
+
+    private func footerNavigationButton(
+        symbol: String,
+        title: String,
+        active: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: 5) {
+                Image(systemName: symbol)
+                    .font(.system(size: 25, weight: .semibold))
+
+                Text(title)
+                    .font(.caption.weight(.semibold))
+            }
+            .frame(width: 92)
+            .foregroundStyle(active ? .red : .white)
+        }
+        .buttonStyle(.plain)
+    }
+
     // MARK: - Top Controls
 
     private var topControls: some View {
-        HStack(spacing: 14) {
+        HStack {
             if recordingSession.hasTorch {
                 Button(action: recordingSession.toggleTorch) {
                     Image(
@@ -156,6 +206,8 @@ struct ContentView: View {
                             ? "bolt.fill"
                             : "bolt.slash.fill"
                     )
+                    .font(.system(size: 30, weight: .medium))
+                    .frame(width: 48, height: 48)
                 }
                 .disabled(recordingSession.state != .ready)
             }
@@ -165,48 +217,18 @@ struct ContentView: View {
             Button {
                 showSettings = true
             } label: {
-                Text(formatText)
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(
-                        .black.opacity(0.55),
-                        in: Capsule()
-                    )
-            }
-            .disabled(
-                recordingSession.state == .recording ||
-                recordingSession.state == .paused
-            )
-
-            Button {
-                showSensorOverlay.toggle()
-            } label: {
-                Image(
-                    systemName: showSensorOverlay
-                        ? "waveform.path.ecg"
-                        : "waveform.path.ecg.rectangle"
-                )
-            }
-
-            Button(action: recordingSession.switchCamera) {
-                Image(systemName: "camera.rotate")
-            }
-            .disabled(recordingSession.state != .ready)
-
-            Button {
-                showSettings = true
-            } label: {
                 Image(systemName: "gearshape")
+                    .font(.system(size: 30, weight: .medium))
+                    .frame(width: 48, height: 48)
             }
             .disabled(
                 recordingSession.state == .recording ||
                 recordingSession.state == .paused
             )
         }
-        .font(.title3)
         .foregroundStyle(.white)
-        .padding(.top, 8)
+        .padding(.horizontal, 22)
+        .padding(.top, 16)
     }
 
     // MARK: - Recording Badge
@@ -294,9 +316,8 @@ struct ContentView: View {
     @ViewBuilder
     private var cameraControls: some View {
         switch recordingSession.state {
-
         case .recording:
-            HStack(spacing: 56) {
+            HStack(spacing: 16) {
                 cameraControl(
                     symbol: "pause.fill",
                     title: "Pause",
@@ -306,14 +327,13 @@ struct ContentView: View {
                 cameraControl(
                     symbol: "stop.fill",
                     title: "Stop",
-                    tint: .red
-                ) {
-                    recordingSession.stop()
-                }
+                    tint: .red,
+                    action: recordingSession.stop
+                )
             }
 
         case .paused:
-            HStack(spacing: 56) {
+            HStack(spacing: 16) {
                 cameraControl(
                     symbol: "play.fill",
                     title: "Resume",
@@ -323,32 +343,26 @@ struct ContentView: View {
                 cameraControl(
                     symbol: "stop.fill",
                     title: "Stop",
-                    tint: .red
-                ) {
-                    recordingSession.stop()
-                }
+                    tint: .red,
+                    action: recordingSession.stop
+                )
             }
 
         default:
             Button(action: recordingSession.start) {
                 Circle()
-                    .stroke(.white, lineWidth: 5)
-                    .frame(
-                        width: 76,
-                        height: 76
-                    )
+                    .stroke(.white, lineWidth: 6)
+                    .frame(width: 96, height: 96)
                     .overlay(
                         Circle()
                             .fill(.red)
-                            .padding(7)
+                            .padding(9)
                     )
             }
             .buttonStyle(.plain)
             .disabled(recordingSession.state != .ready)
             .opacity(
-                recordingSession.state == .ready
-                    ? 1
-                    : 0.55
+                recordingSession.state == .ready ? 1 : 0.55
             )
         }
     }
@@ -463,6 +477,53 @@ private struct VideoSettingsView: View {
                     }
                 }
             }
+        }
+    }
+}
+
+// MARK: - Settings
+
+private struct SettingsView: View {
+    @ObservedObject var session: RecordingSession
+    @ObservedObject var licenseManager: LicenseManager
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Recording") {
+                    NavigationLink {
+                        VideoSettingsView(session: session)
+                    } label: {
+                        Label("Video Settings", systemImage: "video")
+                    }
+
+                    HStack {
+                        Label("Audio", systemImage: "mic")
+                        Spacer()
+                        Text("Coming next")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Button {
+                        session.switchCamera()
+                    } label: {
+                        Label("Switch Camera", systemImage: "camera.rotate")
+                    }
+                    .disabled(
+                        session.state == .recording ||
+                        session.state == .paused
+                    )
+                }
+
+                Section {
+                    NavigationLink {
+                        AboutView(licenseManager: licenseManager)
+                    } label: {
+                        Label("About", systemImage: "info.circle")
+                    }
+                }
+            }
+            .navigationTitle("Settings")
         }
     }
 }

@@ -136,7 +136,8 @@ final class RecordingSession: ObservableObject {
                 width: format.width,
                 height: format.height,
                 fps: format.fps,
-                audioEnabled: audioEnabled
+                audioEnabled: audioEnabled,
+                transform: cameraRecorder.recordingTransform()
             )
 
             let metadata = RecordingMetadata(

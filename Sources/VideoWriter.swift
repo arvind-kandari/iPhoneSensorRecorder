@@ -29,13 +29,17 @@ final class VideoWriter {
         width: Int,
         height: Int,
         fps: Double,
-        audioEnabled: Bool
+        audioEnabled: Bool,
+        transform: CGAffineTransform
     ) throws {
 
         lock.lock()
         defer { lock.unlock() }
 
-        let assetWriter = try AVAssetWriter(outputURL: url, fileType: .mov)
+        let assetWriter = try AVAssetWriter(
+            outputURL: url,
+            fileType: .mov
+        )
 
         let videoSettings: [String: Any] = [
             AVVideoCodecKey: AVVideoCodecType.h264,
@@ -54,6 +58,10 @@ final class VideoWriter {
         )
 
         video.expectsMediaDataInRealTime = true
+
+        // IMPORTANT:
+        // Store portrait orientation in the video file.
+        video.transform = transform
 
         guard assetWriter.canAdd(video) else {
             throw VideoWriterError.cannotAddVideoInput
@@ -99,7 +107,6 @@ final class VideoWriter {
     }
 
     func append(_ sampleBuffer: CMSampleBuffer) {
-
         appendBuffer(
             sampleBuffer,
             to: videoInput
@@ -107,7 +114,6 @@ final class VideoWriter {
     }
 
     func appendAudio(_ sampleBuffer: CMSampleBuffer) {
-
         appendBuffer(
             sampleBuffer,
             to: audioInput
@@ -119,7 +125,7 @@ final class VideoWriter {
         to input: AVAssetWriterInput?
     ) {
 
-        guard let input = input else {
+        guard let input else {
             return
         }
 
@@ -130,7 +136,7 @@ final class VideoWriter {
         lock.lock()
         defer { lock.unlock() }
 
-        guard let writer = writer else {
+        guard let writer else {
             return
         }
 
@@ -138,20 +144,26 @@ final class VideoWriter {
             return
         }
 
-        let sourceTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        let sourceTime =
+            CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
 
+        // Start writer on first received sample.
         if !isStarted {
 
             guard writer.status == .unknown else {
                 return
             }
 
-            writer.startWriting()
+            guard writer.startWriting() else {
+                return
+            }
+
             writer.startSession(atSourceTime: sourceTime)
 
             isStarted = true
         }
 
+        // During pause, don't write frames.
         if isPaused {
 
             if pauseStartTime == nil {
@@ -161,17 +173,46 @@ final class VideoWriter {
             return
         }
 
+        // We have resumed.
+        // Calculate the complete duration of the pause using
+        // the first frame received after resume.
+        if let pauseStartTime {
+
+            let currentPauseDuration =
+                CMTimeSubtract(
+                    sourceTime,
+                    pauseStartTime
+                )
+
+            if currentPauseDuration.isValid &&
+                currentPauseDuration > .zero {
+
+                pausedDuration =
+                    CMTimeAdd(
+                        pausedDuration,
+                        currentPauseDuration
+                    )
+            }
+
+            self.pauseStartTime = nil
+        }
+
         var retimedBuffer = sampleBuffer
 
+        // Remove all accumulated pause time from the timestamps.
         if pausedDuration > .zero {
 
-            var timingInfo = [CMSampleTimingInfo](
+            var timingInfo = [
+                CMSampleTimingInfo
+            ](
                 repeating: CMSampleTimingInfo(
                     duration: .zero,
                     presentationTimeStamp: .zero,
                     decodeTimeStamp: .invalid
                 ),
-                count: CMSampleBufferGetNumSamples(sampleBuffer)
+                count: CMSampleBufferGetNumSamples(
+                    sampleBuffer
+                )
             )
 
             var count = timingInfo.count
@@ -192,13 +233,14 @@ final class VideoWriter {
                     )
 
                 if timingInfo[index].decodeTimeStamp.isValid {
-                     timingInfo[index].decodeTimeStamp =
+
+                    timingInfo[index].decodeTimeStamp =
                         CMTimeSubtract(
                             timingInfo[index].decodeTimeStamp,
                             pausedDuration
                         )
-                }  
-            }          
+                }
+            }
 
             var newBuffer: CMSampleBuffer?
 
@@ -227,7 +269,7 @@ final class VideoWriter {
         lock.lock()
         defer { lock.unlock() }
 
-        guard isStarted else {
+        guard isStarted, !isPaused else {
             return
         }
 
@@ -240,20 +282,25 @@ final class VideoWriter {
         lock.lock()
         defer { lock.unlock() }
 
-        guard isStarted else {
+        guard isStarted, isPaused else {
             return
         }
 
-        isPaused = false
+        // IMPORTANT:
+        // Do NOT clear pauseStartTime here.
+        // The first frame after resume is used to calculate
+        // the exact pause duration.
 
-        pauseStartTime = nil
+        isPaused = false
     }
 
-    func finish(completion: @escaping (URL?) -> Void) {
+    func finish(
+        completion: @escaping (URL?) -> Void
+    ) {
 
         lock.lock()
 
-        guard let writer = writer else {
+        guard let writer else {
             lock.unlock()
             completion(videoURL)
             return
@@ -268,17 +315,24 @@ final class VideoWriter {
 
             self?.lock.lock()
 
-            let success = writer.status == .completed
+            let success =
+                writer.status == .completed
 
             self?.writer = nil
             self?.videoInput = nil
             self?.audioInput = nil
             self?.isStarted = false
             self?.isPaused = false
+            self?.pauseStartTime = nil
+            self?.pausedDuration = .zero
 
             self?.lock.unlock()
 
-            completion(success ? outputURL : nil)
+            completion(
+                success
+                    ? outputURL
+                    : nil
+            )
         }
 
         lock.unlock()

@@ -9,10 +9,6 @@ on:
 jobs:
   build:
     runs-on: macos-latest
-    env:
-      KEYCHAIN_PATH: ${{ runner.temp }}/app-signing.keychain-db
-      CERTIFICATE_PATH: ${{ runner.temp }}/distribution.p12
-      PROFILE_TEMP_PATH: ${{ runner.temp }}/distribution.mobileprovision
 
     steps:
       - name: Checkout
@@ -34,6 +30,13 @@ jobs:
           PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
         run: |
           set -euo pipefail
+
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          CERTIFICATE_PATH="$RUNNER_TEMP/distribution.p12"
+          PROFILE_TEMP_PATH="$RUNNER_TEMP/distribution.mobileprovision"
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+          echo "CERTIFICATE_PATH=$CERTIFICATE_PATH" >> "$GITHUB_ENV"
+          echo "PROFILE_TEMP_PATH=$PROFILE_TEMP_PATH" >> "$GITHUB_ENV"
 
           printf '%s' "$CERTIFICATE_BASE64" | base64 --decode > "$CERTIFICATE_PATH"
           printf '%s' "$PROVISIONING_PROFILE_BASE64" | base64 --decode > "$PROFILE_TEMP_PATH"

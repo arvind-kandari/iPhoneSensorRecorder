@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Support and usage guidance for CapturE By CyberData on iPhone.">
+  <meta name="theme-color" content="#090909">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23090909'/%3E%3Ccircle cx='32' cy='32' r='17' fill='none' stroke='%23ff7a1a' stroke-width='6'/%3E%3Ccircle cx='32' cy='32' r='7' fill='%23ff7a1a'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+  <title>CapturE By CyberData — Support</title>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="index.html" aria-label="CapturE support home"><span class="brand-mark" aria-hidden="true"></span><span>CapturE <small>By CyberData</small></span></a>
+    <nav aria-label="Primary navigation"><a class="active" href="index.html" aria-current="page">Support</a><a href="privacy.html">Privacy Policy</a></nav>
+  </header>
+  <main>
+    <section class="hero">
+      <p class="eyebrow">iPhone recording support</p>
+      <h1>Capture video and motion data in sync.</h1>
+      <p class="lede">CapturE records camera footage alongside timestamped iPhone sensor measurements, keeping each recording together for straightforward transfer and analysis.</p>
+      <a class="button" href="https://github.com/arvind-kandari/iPhoneSensorRecorder/issues">Open a support issue</a>
+    </section>
+    <section class="section" aria-labelledby="usage">
+      <div class="section-heading"><p class="eyebrow">Getting started</p><h2 id="usage">Basic usage</h2></div>
+      <ol class="steps">
+        <li><span>01</span><div><h3>Allow access</h3><p>Grant camera and motion access when prompted. Grant microphone access if you plan to record audio.</p></div></li>
+        <li><span>02</span><div><h3>Choose camera settings</h3><p>Select a supported resolution and frame rate, then frame your shot in the live preview.</p></div></li>
+        <li><span>03</span><div><h3>Record</h3><p>Tap Record. Use Pause and Resume within the current recording, or Stop to finish it.</p></div></li>
+        <li><span>04</span><div><h3>Transfer your files</h3><p>Open Recordings to review locally stored sessions and transfer the files you need.</p></div></li>
+      </ol>
+    </section>
+    <section class="section" aria-labelledby="outputs">
+      <div class="section-heading"><p class="eyebrow">What is recorded</p><h2 id="outputs">One session, coordinated outputs</h2></div>
+      <div class="feature-grid">
+        <article><h3>Camera video</h3><p>The selected iPhone camera records video to <code>video.mov</code>.</p></article>
+        <article><h3>Accelerometer</h3><p>Measures acceleration along the device's X, Y, and Z axes.</p></article>
+        <article><h3>Gyroscope</h3><p>Measures rotation rate around the device's three axes.</p></article>
+        <article><h3>Magnetometer</h3><p>Records magnetic-field measurements reported by the device.</p></article>
+        <article><h3>Device attitude</h3><p>Records calculated attitude and orientation values.</p></article>
+        <article><h3>Sensor timestamps</h3><p>Timing information relates sensor measurements to the recording timeline.</p></article>
+        <article><h3>Audio</h3><p>Microphone audio is included when audio recording is enabled and permission is granted.</p></article>
+        <article><h3>CSV and metadata</h3><p>Measurements are saved in <code>sensors.csv</code> and session details in <code>metadata.json</code>.</p></article>
+      </div>
+    </section>
+    <section class="section split" aria-labelledby="storage">
+      <div><p class="eyebrow">Your recordings</p><h2 id="storage">Stored locally on your iPhone</h2></div>
+      <p>Each completed recording folder contains its video, sensor CSV, and metadata file. Recordings remain local until you transfer them using available iOS file-sharing options.</p>
+    </section>
+    <section class="section" aria-labelledby="troubleshooting">
+      <div class="section-heading"><p class="eyebrow">Troubleshooting</p><h2 id="troubleshooting">Common checks</h2></div>
+      <div class="troubleshooting">
+        <details><summary>The camera preview is unavailable</summary><p>In iPhone Settings, confirm camera permission is enabled for CapturE, then reopen the app.</p></details>
+        <details><summary>Sensor data is missing</summary><p>Confirm Motion &amp; Fitness access is allowed, then start a new recording.</p></details>
+        <details><summary>Audio is missing</summary><p>Check that audio recording was enabled and microphone permission was granted before recording.</p></details>
+        <details><summary>A resolution or frame rate is not listed</summary><p>CapturE shows combinations supported by the selected camera. Choices vary by camera and iPhone model.</p></details>
+        <details><summary>I cannot find a recording</summary><p>Check Recordings and the CapturE location exposed through iOS Files or device file sharing.</p></details>
+      </div>
+    </section>
+    <section class="support-callout" aria-labelledby="contact">
+      <div><p class="eyebrow">Need more help?</p><h2 id="contact">Contact support on GitHub</h2><p>Open a GitHub issue with your iPhone model, what happened, and steps to reproduce it. Do not attach private recordings or license keys.</p></div>
+      <a class="button" href="https://github.com/arvind-kandari/iPhoneSensorRecorder/issues">Go to GitHub Issues</a>
+    </section>
+  </main>
+  <footer><span>CapturE By CyberData</span><a href="privacy.html">Privacy Policy</a></footer>
+</body>
+</html>

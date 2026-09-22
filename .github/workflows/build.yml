@@ -78,7 +78,7 @@ jobs:
             -destination 'generic/platform=iOS' \
             -archivePath "$PWD/build/CapturE.xcarchive" \
             CODE_SIGN_STYLE=Manual \
-            DEVELOPMENT_TEAM=T5MV2V8L4J \
+            DEVELOPMENT_TEAM=T5MV2V28L4 \
             PRODUCT_BUNDLE_IDENTIFIER=com.arvindkandari.iPhoneSensorRecorder \
             PROVISIONING_PROFILE_SPECIFIER="CapturE App Store Distribution" \
             CODE_SIGN_IDENTITY="Apple Distribution" \
@@ -99,7 +99,7 @@ jobs:
             <key>signingCertificate</key>
             <string>Apple Distribution</string>
             <key>teamID</key>
-            <string>T5MV2V8L4J</string>
+            <string>T5MV2V28L4</string>
             <key>provisioningProfiles</key>
             <dict>
               <key>com.arvindkandari.iPhoneSensorRecorder</key>

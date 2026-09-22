@@ -9,6 +9,10 @@ on:
 jobs:
   build:
     runs-on: macos-latest
+    env:
+      KEYCHAIN_PATH: ${{ runner.temp }}/app-signing.keychain-db
+      CERTIFICATE_PATH: ${{ runner.temp }}/distribution.p12
+      PROFILE_TEMP_PATH: ${{ runner.temp }}/distribution.mobileprovision
 
     steps:
       - name: Checkout
@@ -23,53 +27,120 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
-      - name: Build iOS app
-        continue-on-error: true
+      - name: Install signing certificate and provisioning profile
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          set -euo pipefail
+
+          printf '%s' "$CERTIFICATE_BASE64" | base64 --decode > "$CERTIFICATE_PATH"
+          printf '%s' "$PROVISIONING_PROFILE_BASE64" | base64 --decode > "$PROFILE_TEMP_PATH"
+
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" \
+            -k "$KEYCHAIN_PATH" \
+            -P "$CERTIFICATE_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -s \
+            -k "$KEYCHAIN_PASSWORD" \
+            "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
+
+          security cms -D -i "$PROFILE_TEMP_PATH" > "$RUNNER_TEMP/profile.plist"
+          PROFILE_UUID="$(/usr/libexec/PlistBuddy -c 'Print UUID' "$RUNNER_TEMP/profile.plist")"
+          PROFILE_DIRECTORY="$HOME/Library/MobileDevice/Provisioning Profiles"
+          PROFILE_PATH="$PROFILE_DIRECTORY/$PROFILE_UUID.mobileprovision"
+          mkdir -p "$PROFILE_DIRECTORY"
+          cp "$PROFILE_TEMP_PATH" "$PROFILE_PATH"
+          echo "PROFILE_PATH=$PROFILE_PATH" >> "$GITHUB_ENV"
+
+      - name: Archive iOS app
         run: |
           set -o pipefail
+          mkdir -p build
           xcodebuild \
             -project iPhoneSensorRecorder.xcodeproj \
             -scheme iPhoneSensorRecorder \
             -sdk iphoneos \
-            -configuration Debug \
+            -configuration Release \
             -destination 'generic/platform=iOS' \
-            CODE_SIGNING_ALLOWED=NO \
-            build 2>&1 | tee xcodebuild.log
+            -archivePath "$PWD/build/CapturE.xcarchive" \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM=T5MV2V8L4J \
+            PRODUCT_BUNDLE_IDENTIFIER=com.arvindkandari.iPhoneSensorRecorder \
+            PROVISIONING_PROFILE_SPECIFIER="CapturE App Store Distribution" \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH" \
+            clean archive 2>&1 | tee build/archive.log
 
-      - name: Upload Xcode build log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: xcode-build-log
-          path: xcodebuild.log
-
-      - name: Fail if build failed
+      - name: Create export options
         run: |
-          if grep -q "\*\* BUILD FAILED \*\*" xcodebuild.log; then
-            exit 1
-          fi
+          cat > build/ExportOptions.plist <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>signingCertificate</key>
+            <string>Apple Distribution</string>
+            <key>teamID</key>
+            <string>T5MV2V8L4J</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>com.arvindkandari.iPhoneSensorRecorder</key>
+              <string>CapturE App Store Distribution</string>
+            </dict>
+          </dict>
+          </plist>
+          PLIST
 
-      - name: Package app
+      - name: Export App Store Connect IPA
         run: |
-          mkdir -p build
-          cp -R ~/Library/Developer/Xcode/DerivedData/iPhoneSensorRecorder-*/Build/Products/Debug-iphoneos/iPhoneSensorRecorder.app build/
-
-      - name: Create unsigned IPA
-        run: |
-          mkdir -p build/Payload
-          cp -R build/iPhoneSensorRecorder.app build/Payload/
-          cd build
-          zip -r iPhoneSensorRecorder-unsigned.ipa Payload
-          rm -rf Payload
-
-      - name: Upload app
-        uses: actions/upload-artifact@v4
-        with:
-          name: iPhoneSensorRecorder-app
-          path: build/iPhoneSensorRecorder.app
+          set -o pipefail
+          xcodebuild \
+            -exportArchive \
+            -archivePath "$PWD/build/CapturE.xcarchive" \
+            -exportPath "$PWD/build/export" \
+            -exportOptionsPlist "$PWD/build/ExportOptions.plist" \
+            2>&1 | tee build/export.log
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: iPhoneSensorRecorder-unsigned-ipa
-          path: build/iPhoneSensorRecorder-unsigned.ipa
+          name: CapturE-app-store-ipa
+          path: build/export/*.ipa
+          if-no-files-found: error
+
+      - name: Upload archive and export logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcode-archive-export-logs
+          path: |
+            build/archive.log
+            build/export.log
+          if-no-files-found: warn
+
+      - name: Clean up signing material
+        if: always()
+        run: |
+          if [ -n "${PROFILE_PATH:-}" ]; then
+            rm -f "$PROFILE_PATH"
+          fi
+          security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
+          rm -f \
+            "$CERTIFICATE_PATH" \
+            "$PROFILE_TEMP_PATH" \
+            "$RUNNER_TEMP/profile.plist"

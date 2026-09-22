@@ -145,12 +145,12 @@ jobs:
           printf '%s' "$APPSTORE_API_PRIVATE_KEY" > "$PRIVATE_KEY_PATH"
           trap 'rm -rf "$UPLOAD_DIRECTORY"' EXIT
 
-          cd "$UPLOAD_DIRECTORY"
-          xcrun iTMSTransporter \
-            -m upload \
-            -assetFile "$IPA_PATH" \
-            -apiKey "$APPSTORE_API_KEY_ID" \
-            -apiIssuer "$APPSTORE_API_ISSUER_ID"
+          export API_PRIVATE_KEYS_DIR="$PRIVATE_KEYS_DIRECTORY"
+          xcrun altool --upload-app \
+            --type ios \
+            --file "$IPA_PATH" \
+            --apiKey "$APPSTORE_API_KEY_ID" \
+            --apiIssuer "$APPSTORE_API_ISSUER_ID"
 
       - name: Upload archive and export logs
         if: always()

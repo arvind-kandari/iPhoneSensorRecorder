@@ -444,10 +444,10 @@ final class CameraRecorder: NSObject {
                     y: min(max(normalizedPoint.y, 0), 1)
                 )
 
-                if camera.isFocusModeSupported(.continuousAutoFocus) {
-                    camera.focusMode = .continuousAutoFocus
-                } else if camera.isFocusModeSupported(.autoFocus) {
+                if camera.isFocusModeSupported(.autoFocus) {
                     camera.focusMode = .autoFocus
+                } else if camera.isFocusModeSupported(.continuousAutoFocus) {
+                    camera.focusMode = .continuousAutoFocus
                 }
             } catch {
                 return

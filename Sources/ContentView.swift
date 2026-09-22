@@ -316,7 +316,6 @@ struct ContentView: View {
                     scheduleFocusDismissal()
                 }
         )
-        .disabled(recordingSession.state != .ready)
     }
 
     private func handleFocusTap(

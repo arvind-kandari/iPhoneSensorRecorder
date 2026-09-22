@@ -52,9 +52,6 @@ final class RecordingSession: ObservableObject {
     }
 
     func setExposureBias(_ bias: Double) {
-        guard !isRecording, !isPaused else {
-            return
-        }
         exposureBias = bias
         cameraRecorder.setExposureBias(bias)
     }
@@ -157,6 +154,8 @@ final class RecordingSession: ObservableObject {
             return
         }
 
+        cameraRecorder.logCameraStateBeforeRecording()
+
         do {
 
             let files = try RecordingFiles()
@@ -180,6 +179,8 @@ final class RecordingSession: ObservableObject {
                 transform: cameraRecorder.recordingTransform()
             )
 
+            cameraRecorder.logCameraStateAfterVideoWriterStart()
+
             let metadata = RecordingMetadata(
                 appVersion: AppInfo.version,
                 recordingID: files.folderURL.lastPathComponent,
@@ -202,6 +203,7 @@ final class RecordingSession: ObservableObject {
 
             sensorManager.start()
 
+            cameraRecorder.logCameraStateBeforeCameraStart()
             cameraRecorder.start()
 
             isRecording = true

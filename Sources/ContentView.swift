@@ -97,6 +97,7 @@ struct ContentView: View {
 
                 CameraPreview(
                     session: recordingSession.captureSession,
+                    isRecording: recordingSession.isRecording,
                     onFocusTap: handleFocusTap
                 )
                 .frame(
@@ -864,7 +865,7 @@ private struct AboutView: View {
                         Text("Cyber Data")
                             .font(.footnote)
 
-                        Text("SensorSync Recorder")
+                        Text("CapturE")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

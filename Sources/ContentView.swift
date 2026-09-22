@@ -41,48 +41,43 @@ struct ContentView: View {
     }
 
     private var activatedContent: some View {
-        ZStack {
-            recordView
-                .ignoresSafeArea()
-
-            VStack {
-                Spacer()
-
+        recordView
+            .ignoresSafeArea()
+            .overlay(alignment: .bottom) {
                 bottomControls
                     .padding(.horizontal, 24)
                     .padding(.bottom, 22)
+                    .ignoresSafeArea(.keyboard)
             }
-            .ignoresSafeArea(.keyboard)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .ignoresSafeArea()
-        .tint(.red)
-        .preferredColorScheme(.dark)
-        .onAppear {
-            recordingSession.onSensorReading = { reading in
-                DispatchQueue.main.async {
-                    sensorReading = reading
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .ignoresSafeArea()
+            .tint(.red)
+            .preferredColorScheme(.dark)
+            .onAppear {
+                recordingSession.onSensorReading = { reading in
+                    DispatchQueue.main.async {
+                        sensorReading = reading
+                    }
                 }
-            }
 
-            recordingSession.configure()
-        }
-        .onReceive(
-            NotificationCenter.default.publisher(
-                for: UIApplication.willEnterForegroundNotification
-            )
-        ) { _ in
-            licenseManager.refreshValidity()
-        }
-        .sheet(isPresented: $showSettings) {
-            SettingsView(
-                session: recordingSession,
-                licenseManager: licenseManager
-            )
-        }
-        .sheet(isPresented: $showRecordings) {
-            RecordingsView()
-        }
+                recordingSession.configure()
+            }
+            .onReceive(
+                NotificationCenter.default.publisher(
+                    for: UIApplication.willEnterForegroundNotification
+                )
+            ) { _ in
+                licenseManager.refreshValidity()
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView(
+                    session: recordingSession,
+                    licenseManager: licenseManager
+                )
+            }
+            .sheet(isPresented: $showRecordings) {
+                RecordingsView()
+            }
     }
 
 

@@ -4,6 +4,7 @@ import CryptoKit
 struct VerifiedLicense {
     let version: Int
     let product: String
+    let licenseType: String
     let licenseID: String
     let fullName: String
     let username: String
@@ -38,7 +39,7 @@ enum LicenseVerificationError: LocalizedError {
         case .unsupportedVersion:
             return "This license version is not supported."
         case .unsupportedProduct:
-            return "This license is not for SensorSync Recorder."
+            return "This license is not for CapturE."
         case .missingField(let field):
             return "License is missing \(field)."
         case .licenseExpired:
@@ -123,6 +124,22 @@ enum LicenseVerifier {
             throw LicenseVerificationError.missingField("product")
         }
 
+        let licenseType: String
+
+        if let payloadLicenseType = payload["license_type"] {
+            guard let value = payloadLicenseType as? String else {
+                throw LicenseVerificationError.invalidPayload
+            }
+
+            licenseType = value
+        } else {
+            licenseType = "device"
+        }
+
+        guard licenseType == "device" || licenseType == "app_review" else {
+            throw LicenseVerificationError.invalidPayload
+        }
+
         guard
             let licenseID = payload["license_id"] as? String,
             !licenseID.isEmpty
@@ -188,20 +205,22 @@ enum LicenseVerifier {
             throw LicenseVerificationError.invalidPayload
         }
 
-        let identity: DeviceIdentity
+        if licenseType == "device" {
+            let identity: DeviceIdentity
 
-        do {
-        identity = try DeviceIdentity.load()
-        } catch {
-        throw LicenseVerificationError.deviceIdentityUnavailable
-        }
+            do {
+                identity = try DeviceIdentity.load()
+            } catch {
+                throw LicenseVerificationError.deviceIdentityUnavailable
+            }
 
-        guard devicePublicKey == identity.publicKeyBase64URL else {
-            throw LicenseVerificationError.wrongDevice
-        }
+            guard devicePublicKey == identity.publicKeyBase64URL else {
+                throw LicenseVerificationError.wrongDevice
+            }
 
-        guard deviceID == identity.deviceID else {
-            throw LicenseVerificationError.wrongDevice
+            guard deviceID == identity.deviceID else {
+                throw LicenseVerificationError.wrongDevice
+            }
         }
 
         guard let expirationDate = parseISO8601(expiresAt) else {
@@ -215,6 +234,7 @@ enum LicenseVerifier {
         return VerifiedLicense(
             version: version,
             product: product,
+            licenseType: licenseType,
             licenseID: licenseID,
             fullName: payloadName,
             username: payloadUsername,

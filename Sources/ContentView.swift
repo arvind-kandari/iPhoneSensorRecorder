@@ -114,21 +114,6 @@ struct ContentView: View {
     private func recordView(safeAreaInsets: EdgeInsets) -> some View {
         GeometryReader { proxy in
             ZStack {
-                Color.black
-                    .ignoresSafeArea()
-
-                CameraPreview(
-                    session: recordingSession.captureSession,
-                    isRecording: recordingSession.isRecording,
-                    onFocusTap: handleFocusTap
-                )
-                .frame(
-                    width: proxy.size.width,
-                    height: proxy.size.height
-                )
-                .clipped()
-                .ignoresSafeArea()
-
                 LinearGradient(
                     colors: [
                         .black.opacity(0.25),
@@ -192,6 +177,28 @@ struct ContentView: View {
                 width: proxy.size.width,
                 height: proxy.size.height
             )
+            .background {
+                GeometryReader { previewProxy in
+                    CameraPreview(
+                        session: recordingSession.captureSession,
+                        isRecording: recordingSession.isRecording,
+                        onFocusTap: { point, devicePoint in
+                            let origin = previewProxy.frame(in: .named("cameraControls")).origin
+                            handleFocusTap(
+                                CGPoint(x: point.x + origin.x, y: point.y + origin.y),
+                                devicePoint
+                            )
+                        }
+                    )
+                    .frame(
+                        width: previewProxy.size.width,
+                        height: previewProxy.size.height
+                    )
+                    .clipped()
+                }
+                .ignoresSafeArea(.container)
+            }
+            .coordinateSpace(name: "cameraControls")
             .ignoresSafeArea()
         }
         .ignoresSafeArea()

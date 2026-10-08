@@ -56,6 +56,7 @@ final class CameraRecorder: NSObject {
 
     private var camera: AVCaptureDevice?
     private var cameraInput: AVCaptureDeviceInput?
+    private var recordingRotationCoordinator: AVCaptureDevice.RotationCoordinator?
 
     private var microphoneInput: AVCaptureDeviceInput?
 
@@ -109,6 +110,10 @@ final class CameraRecorder: NSObject {
             }
 
             self.camera = camera
+            self.recordingRotationCoordinator = AVCaptureDevice.RotationCoordinator(
+                device: camera,
+                previewLayer: nil
+            )
 
             do {
                 let input = try AVCaptureDeviceInput(device: camera)
@@ -480,7 +485,26 @@ final class CameraRecorder: NSObject {
     // MARK: - Recording
 
     func recordingTransform() -> CGAffineTransform {
-        CGAffineTransform(rotationAngle: .pi / 2)
+        sessionQueue.sync {
+            guard let coordinator = recordingRotationCoordinator,
+                  let format = selectedFormat else {
+                return CGAffineTransform.identity
+            }
+
+            // Compensate only for rotation not already applied to the sample buffers.
+            let bufferAngle = videoOutput.connection(with: .video)?.videoRotationAngle ?? 0
+            let angle = coordinator.videoRotationAngleForHorizonLevelCapture - bufferAngle
+            var transform = CGAffineTransform(rotationAngle: angle * .pi / 180)
+            let presentationBounds = CGRect(
+                x: 0,
+                y: 0,
+                width: CGFloat(format.width),
+                height: CGFloat(format.height)
+            ).applying(transform)
+            transform.tx = -presentationBounds.minX
+            transform.ty = -presentationBounds.minY
+            return transform
+        }
     }
 
     func start() {
@@ -564,6 +588,10 @@ final class CameraRecorder: NSObject {
 
             captureSession.addInput(newInput)
             camera = newCamera
+            recordingRotationCoordinator = AVCaptureDevice.RotationCoordinator(
+                device: newCamera,
+                previewLayer: nil
+            )
             cameraInput = newInput
             cameraPosition = position
             formatOptions = newOptions

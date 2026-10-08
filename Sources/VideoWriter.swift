@@ -59,8 +59,7 @@ final class VideoWriter {
 
         video.expectsMediaDataInRealTime = true
 
-        // IMPORTANT:
-        // Store portrait orientation in the video file.
+        // Store the capture orientation as track metadata, without rotating pixels.
         video.transform = transform
 
         guard assetWriter.canAdd(video) else {

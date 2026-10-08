@@ -695,18 +695,50 @@ struct ContentView: View {
     @MainActor
     private func handleVoiceCommand(_ command: VoiceCommand) {
         defer { updateVoiceListening() }
-        guard voiceCommandsEnabled, cameraScreenActive, countdownRemaining == nil,
-              !recordingSession.isFinishing else { return }
+        VoiceCommandDebug.log("ContentView received: \(command), state=\(recordingSession.state)")
+        guard voiceCommandsEnabled else {
+            VoiceCommandDebug.log("Command rejected: Voice Commands OFF")
+            return
+        }
+        guard cameraScreenActive else {
+            VoiceCommandDebug.log("Command rejected: camera screen not active")
+            return
+        }
+        guard countdownRemaining == nil, !recordingSession.isFinishing else {
+            VoiceCommandDebug.log("Command rejected: countdown or finalization in progress")
+            return
+        }
         switch command {
         case .start(let seconds):
+            guard recordingSession.state.canStart else {
+                VoiceCommandDebug.log("Start rejected: recording already active")
+                return
+            }
+            VoiceCommandDebug.log("Executing existing start/countdown: \(seconds) seconds")
             startWithCountdown(seconds: seconds)
         case .stop:
-            if recordingSession.isRecording { recordingSession.stop() }
+            guard recordingSession.state.canStop else {
+                VoiceCommandDebug.log("Stop rejected: no active recording")
+                return
+            }
+            VoiceCommandDebug.log("Executing RecordingSession.stop")
+            recordingSession.stop()
         case .pause:
-            if recordingSession.isRecording && !recordingSession.isPaused { recordingSession.pause() }
+            guard recordingSession.state.canPause else {
+                VoiceCommandDebug.log("Pause rejected: not actively recording")
+                return
+            }
+            VoiceCommandDebug.log("Executing RecordingSession.pause")
+            recordingSession.pause()
         case .resume:
-            if recordingSession.isRecording && recordingSession.isPaused { recordingSession.resume() }
+            guard recordingSession.state.canResume else {
+                VoiceCommandDebug.log("Resume rejected: not paused")
+                return
+            }
+            VoiceCommandDebug.log("Executing RecordingSession.resume")
+            recordingSession.resume()
         }
+        VoiceCommandDebug.log("Action returned; state=\(recordingSession.state), countdown=\(String(describing: countdownRemaining))")
     }
 
     // MARK: - Format
@@ -923,6 +955,22 @@ private struct SettingsView: View {
                         Text(voiceCommands.status)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Available Commands")
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.primary)
+                            Text("\"Start recording\" — Starts recording immediately")
+                            Text("\"Start recording in 5 seconds\" — Starts recording after a 5-second countdown")
+                            Text("\"Start recording in 10 seconds\" — Starts recording after a 10-second countdown")
+                            Text("\"Stop recording\" — Stops recording")
+                            Text("\"Pause recording\" — Pauses recording")
+                            Text("\"Resume recording\" — Resumes recording")
+                            Text("No wake word required. Speak naturally in English.")
+                                .padding(.top, 4)
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                     }
                     NavigationLink {
                         VideoSettingsView(session: session)

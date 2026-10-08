@@ -29,6 +29,9 @@ struct ContentView: View {
     @State private var showsFocusIndicator = false
     @State private var exposureDragStartBias: Double?
     @State private var focusDismissWorkItem: DispatchWorkItem?
+    @State private var countdownSeconds = 0
+    @State private var countdownRemaining: Int?
+    @State private var countdownTask: Task<Void, Never>?
 
     var body: some View {
         Group {
@@ -43,6 +46,16 @@ struct ContentView: View {
     private var activatedContent: some View {
         recordView
             .ignoresSafeArea()
+            .overlay {
+                if let countdownRemaining {
+                    Text("\(countdownRemaining)")
+                        .font(.system(size: 96, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .shadow(radius: 8)
+                        .accessibilityLabel("Recording starts in \(countdownRemaining) seconds")
+                        .allowsHitTesting(false)
+                }
+            }
             .overlay(alignment: .bottom) {
                 bottomControls
                     .padding(.horizontal, 24)
@@ -61,6 +74,16 @@ struct ContentView: View {
                 }
 
                 recordingSession.configure()
+            }
+            .onReceive(
+                NotificationCenter.default.publisher(
+                    for: UIApplication.willResignActiveNotification
+                )
+            ) { _ in
+                cancelCountdown()
+            }
+            .onDisappear {
+                cancelCountdown()
             }
             .onReceive(
                 NotificationCenter.default.publisher(
@@ -191,6 +214,20 @@ struct ContentView: View {
 
             Spacer()
 
+            Menu {
+                Picker("Countdown Timer", selection: $countdownSeconds) {
+                    ForEach([0, 3, 5, 10], id: \.self) { seconds in
+                        Text("\(seconds) seconds").tag(seconds)
+                    }
+                }
+            } label: {
+                Label("\(countdownSeconds)s", systemImage: "timer")
+                    .foregroundStyle(.white)
+                    .frame(minWidth: 44, minHeight: 44)
+            }
+            .accessibilityLabel("Countdown Timer: \(countdownSeconds) seconds")
+            .disabled(recordingSession.state != .ready || countdownRemaining != nil)
+
             Button {
                 showSettings = true
             } label: {
@@ -203,7 +240,8 @@ struct ContentView: View {
             .buttonStyle(.plain)
             .disabled(
                 recordingSession.state == .recording ||
-                recordingSession.state == .paused
+                recordingSession.state == .paused ||
+                countdownRemaining != nil
             )
         }
         .padding(.top, 8)
@@ -470,7 +508,7 @@ struct ContentView: View {
         default:
             Button {
                 DispatchQueue.main.async {
-                    recordingSession.start()
+                    startWithCountdown()
                 }
             } label: {
                 Circle()
@@ -486,7 +524,7 @@ struct ContentView: View {
             .frame(width: 64, height: 64)
             .contentShape(Circle())
             .buttonStyle(.plain)
-            .disabled(recordingSession.state != .ready)
+            .disabled(recordingSession.state != .ready || countdownRemaining != nil)
             .opacity(
                 recordingSession.state == .ready
                     ? 1
@@ -535,6 +573,42 @@ struct ContentView: View {
             }
             .buttonStyle(.plain)
         }
+        .disabled(countdownRemaining != nil)
+    }
+
+    @MainActor
+    private func startWithCountdown() {
+        guard recordingSession.state == .ready, countdownRemaining == nil else {
+            return
+        }
+
+        guard countdownSeconds > 0 else {
+            recordingSession.start()
+            return
+        }
+
+        countdownRemaining = countdownSeconds
+        countdownTask = Task { @MainActor in
+            do {
+                while let remaining = countdownRemaining, remaining > 0 {
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                    try Task.checkCancellation()
+                    countdownRemaining = remaining - 1
+                }
+            } catch {
+                return
+            }
+
+            countdownRemaining = nil
+            countdownTask = nil
+            recordingSession.start()
+        }
+    }
+
+    private func cancelCountdown() {
+        countdownTask?.cancel()
+        countdownTask = nil
+        countdownRemaining = nil
     }
 
     // MARK: - Format

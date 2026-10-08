@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import Combine
+import UIKit
 
 final class RecordingSession: ObservableObject {
 
@@ -210,6 +211,8 @@ final class RecordingSession: ObservableObject {
             isPaused = false
             elapsedTime = 0
 
+            setDisplayAwake(true)
+
             startTimer()
 
         } catch {
@@ -232,6 +235,7 @@ final class RecordingSession: ObservableObject {
         timeSynchronizer.pause()
 
         isPaused = true
+        setDisplayAwake(false)
     }
 
     func resume() {
@@ -245,6 +249,7 @@ final class RecordingSession: ObservableObject {
         videoWriter.resume()
 
         isPaused = false
+        setDisplayAwake(true)
     }
 
     func stop() {
@@ -253,6 +258,7 @@ final class RecordingSession: ObservableObject {
             return
         }
 
+        setDisplayAwake(false)
         sensorManager.stop()
 
         timer?.invalidate()
@@ -301,6 +307,12 @@ final class RecordingSession: ObservableObject {
     }
 
     // MARK: - Timer
+
+    private func setDisplayAwake(_ awake: Bool) {
+        DispatchQueue.main.async {
+            UIApplication.shared.isIdleTimerDisabled = awake
+        }
+    }
 
     private func startTimer() {
 

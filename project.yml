@@ -31,7 +31,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.arvindkandari.iPhoneSensorRecorder
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        MARKETING_VERSION: "1.0"
+        MARKETING_VERSION: "1.1"
         CURRENT_PROJECT_VERSION: "4"
         GENERATE_INFOPLIST_FILE: NO
         SWIFT_VERSION: "5.0"

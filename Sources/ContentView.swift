@@ -99,8 +99,8 @@ struct ContentView: View {
                 recordingSession.voiceCommands.onCommand = nil
                 cancelCountdown()
             }
-            .onChange(of: voiceCommandsEnabled) { _ in updateVoiceListening() }
-            .onChange(of: countdownRemaining) { _ in updateVoiceListening() }
+            .onChange(of: voiceCommandsEnabled) { updateVoiceListening() }
+            .onChange(of: countdownRemaining) { updateVoiceListening() }
             .onReceive(
                 NotificationCenter.default.publisher(
                     for: UIApplication.willEnterForegroundNotification

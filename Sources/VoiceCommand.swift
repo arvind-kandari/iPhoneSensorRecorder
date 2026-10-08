@@ -6,8 +6,8 @@ enum VoiceCommand: Equatable {
     case pause
     case resume
 
-    static func recognized(_ text: String, isFinal: Bool) -> VoiceCommand? {
-        isFinal ? parse(text) : nil
+    static func recognized(_ text: String, isFinal: Bool, utteranceEnded: Bool = false) -> VoiceCommand? {
+        (isFinal || utteranceEnded) ? parse(text) : nil
     }
 
     static func parse(_ text: String) -> VoiceCommand? {
@@ -26,13 +26,21 @@ enum VoiceCommand: Equatable {
 
 struct VoiceUtteranceBoundary {
     private var lastSpeechTime: TimeInterval?
+    private var noiseFloor: Double?
+
+    mutating func heardTranscript(at time: TimeInterval) {
+        lastSpeechTime = time
+    }
 
     mutating func shouldEnd(level: Double, time: TimeInterval) -> Bool {
-        if level >= 0.015 {
+        guard level.isFinite else { return false }
+        noiseFloor = min(noiseFloor ?? level, level)
+        let threshold = max(0.008, (noiseFloor ?? 0) * 2.5)
+        if level > threshold {
             lastSpeechTime = time
             return false
         }
         guard let lastSpeechTime else { return false }
-        return time - lastSpeechTime >= 0.8
+        return time - lastSpeechTime >= 1.0
     }
 }

@@ -28,6 +28,24 @@ enum VoiceCommandTests {
             precondition(VoiceCommand.recognized("Start recording in \(seconds) seconds", isFinal: true) == .start(seconds))
         }
         precondition(VoiceCommand.recognized("Start recording", isFinal: true) == .start(0))
+        for (text, expected) in valid {
+            precondition(VoiceCommand.recognized(text, isFinal: false, utteranceEnded: false) == nil)
+            precondition(VoiceCommand.recognized(text, isFinal: false, utteranceEnded: true) == expected)
+        }
+        precondition(VoiceCommand.recognized("Start recording in", isFinal: false, utteranceEnded: true) == nil)
+
+        var noisyBoundary = VoiceUtteranceBoundary()
+        precondition(!noisyBoundary.shouldEnd(level: 0.025, time: 0))
+        noisyBoundary.heardTranscript(at: 1)
+        precondition(!noisyBoundary.shouldEnd(level: 0.12, time: 1.2))
+        precondition(!noisyBoundary.shouldEnd(level: 0.025, time: 1.8))
+        precondition(noisyBoundary.shouldEnd(level: 0.025, time: 2.3))
+
+        var quietBoundary = VoiceUtteranceBoundary()
+        precondition(!quietBoundary.shouldEnd(level: 0.002, time: 0))
+        quietBoundary.heardTranscript(at: 1)
+        precondition(!quietBoundary.shouldEnd(level: 0.002, time: 1.5))
+        precondition(quietBoundary.shouldEnd(level: 0.002, time: 2.1))
 
         var boundary = VoiceUtteranceBoundary()
         precondition(!boundary.shouldEnd(level: 0, time: 0))

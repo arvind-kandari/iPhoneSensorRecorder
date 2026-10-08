@@ -3,6 +3,7 @@ import UIKit
 import AVFoundation
 
 struct ContentView: View {
+    @Environment(\.dismiss) private var dismiss
     @StateObject private var recordingSession = RecordingSession()
     @StateObject private var licenseManager = LicenseManager()
     @StateObject private var countdownSpeaker = CountdownSpeaker()
@@ -46,7 +47,8 @@ struct ContentView: View {
     }
 
     private var activatedContent: some View {
-        recordView
+        GeometryReader { safeAreaProxy in
+            recordView(safeAreaInsets: safeAreaProxy.safeAreaInsets)
             .ignoresSafeArea()
             .overlay {
                 if let countdownRemaining {
@@ -61,11 +63,12 @@ struct ContentView: View {
             .overlay(alignment: .bottom) {
                 bottomControls
                     .padding(.horizontal, 24)
-                    .padding(.bottom, 22)
+                    .padding(.bottom, safeAreaProxy.safeAreaInsets.bottom + 12)
                     .ignoresSafeArea(.keyboard)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .ignoresSafeArea()
+        }
             .tint(.red)
             .preferredColorScheme(.dark)
             .onAppear {
@@ -109,7 +112,7 @@ struct ContentView: View {
 
     // MARK: - Record View
 
-    private var recordView: some View {
+    private func recordView(safeAreaInsets: EdgeInsets) -> some View {
         GeometryReader { proxy in
             ZStack {
                 Color.black
@@ -160,16 +163,16 @@ struct ContentView: View {
                     }
 
                     zoomControls
-                        .padding(.top, 18)
-                        .padding(.bottom, 118)
+                        .padding(.top, 10)
                         .zIndex(1)
                 }
+                .padding(.horizontal, 20)
+                .padding(.top, safeAreaInsets.top + 8)
+                .padding(.bottom, safeAreaInsets.bottom + 110)
                 .frame(
                     width: proxy.size.width,
                     height: proxy.size.height
                 )
-                .padding(.horizontal, 20)
-                .padding(.top, 12)
                 .zIndex(3)
 
                 if let focusPoint {
@@ -197,7 +200,22 @@ struct ContentView: View {
     // MARK: - Top Controls
 
     private var topControls: some View {
-        HStack {
+        HStack(spacing: 8) {
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background(.black.opacity(0.4), in: Circle())
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Close")
+            .disabled(recordingSession.state != .ready || countdownRemaining != nil)
+
             if recordingSession.hasTorch {
                 Button(action: recordingSession.toggleTorch) {
                     Image(
@@ -205,8 +223,10 @@ struct ContentView: View {
                             ? "bolt.fill"
                             : "bolt.slash.fill"
                     )
-                    .font(.system(size: 30, weight: .medium))
+                    .font(.system(size: 16, weight: .medium))
                     .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background(.black.opacity(0.4), in: Circle())
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
                 }
@@ -223,9 +243,18 @@ struct ContentView: View {
                     }
                 }
             } label: {
-                Label("\(countdownSeconds)s", systemImage: "timer")
-                    .foregroundStyle(.white)
-                    .frame(minWidth: 44, minHeight: 44)
+                HStack(spacing: 5) {
+                    Image(systemName: "timer")
+                    Text("\(countdownSeconds)s")
+                        .monospacedDigit()
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                }
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.white)
+                .frame(width: 82, height: 34)
+                .background(.black.opacity(0.4), in: Capsule())
+                .frame(height: 44)
             }
             .accessibilityLabel("Countdown Timer: \(countdownSeconds) seconds")
             .disabled(recordingSession.state != .ready || countdownRemaining != nil)
@@ -234,8 +263,10 @@ struct ContentView: View {
                 showSettings = true
             } label: {
                 Image(systemName: "gearshape")
-                    .font(.system(size: 30, weight: .medium))
+                    .font(.system(size: 17, weight: .medium))
                     .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background(.black.opacity(0.4), in: Circle())
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
@@ -246,7 +277,6 @@ struct ContentView: View {
                 countdownRemaining != nil
             )
         }
-        .padding(.top, 8)
     }
     // MARK: - Recording Badge
 
@@ -279,11 +309,13 @@ struct ContentView: View {
     }
 
     private var zoomControls: some View {
-        HStack(spacing: 18) {
+        HStack(spacing: 6) {
             zoomButton(0.5, title: "0.5x")
             zoomButton(1.0, title: "1x")
             zoomButton(2.0, title: "2x")
         }
+        .padding(.horizontal, 12)
+        .background(.black.opacity(0.4), in: Capsule())
         .disabled(
             recordingSession.state != .ready ||
             recordingSession.isFrontCamera
@@ -444,7 +476,7 @@ struct ContentView: View {
         switch recordingSession.state {
 
         case .recording:
-            HStack(spacing: 28) {
+            HStack(spacing: 12) {
 
                 // PAUSE
                 Button {
@@ -453,9 +485,9 @@ struct ContentView: View {
                     }
                 } label: {
                     Image(systemName: "pause.fill")
-                        .font(.system(size: 24, weight: .bold))
+                        .font(.system(size: 19, weight: .bold))
                         .foregroundStyle(.white)
-                        .frame(width: 64, height: 64)
+                        .frame(width: 44, height: 44)
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
@@ -467,16 +499,16 @@ struct ContentView: View {
                     }
                 } label: {
                     Image(systemName: "stop.fill")
-                        .font(.system(size: 24, weight: .bold))
+                        .font(.system(size: 19, weight: .bold))
                         .foregroundStyle(.red)
-                        .frame(width: 64, height: 64)
+                        .frame(width: 44, height: 44)
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
             }
 
         case .paused:
-            HStack(spacing: 28) {
+            HStack(spacing: 12) {
 
                 // RESUME
                 Button {
@@ -485,9 +517,9 @@ struct ContentView: View {
                     }
                 } label: {
                     Image(systemName: "play.fill")
-                        .font(.system(size: 24, weight: .bold))
+                        .font(.system(size: 19, weight: .bold))
                         .foregroundStyle(.white)
-                        .frame(width: 64, height: 64)
+                        .frame(width: 44, height: 44)
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
@@ -499,9 +531,9 @@ struct ContentView: View {
                     }
                 } label: {
                     Image(systemName: "stop.fill")
-                        .font(.system(size: 24, weight: .bold))
+                        .font(.system(size: 19, weight: .bold))
                         .foregroundStyle(.red)
-                        .frame(width: 64, height: 64)
+                        .frame(width: 44, height: 44)
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
@@ -513,18 +545,23 @@ struct ContentView: View {
                     startWithCountdown()
                 }
             } label: {
-                Circle()
-                    .stroke(.white, lineWidth: 4)
-                    .frame(width: 64, height: 64)
-                    .overlay {
-                        Circle()
-                            .fill(.red)
-                            .padding(5)
-                    }
-                    .contentShape(Circle())
+                VStack(spacing: 3) {
+                    Circle()
+                        .stroke(.white, lineWidth: 3)
+                        .frame(width: 56, height: 56)
+                        .overlay {
+                            Circle()
+                                .fill(.red)
+                                .padding(5)
+                        }
+                        .frame(width: 64, height: 64)
+
+                    Text("RECORD")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
             }
-            .frame(width: 64, height: 64)
-            .contentShape(Circle())
+            .contentShape(Rectangle())
             .buttonStyle(.plain)
             .disabled(recordingSession.state != .ready || countdownRemaining != nil)
             .opacity(
@@ -540,40 +577,42 @@ struct ContentView: View {
     private var bottomControls: some View {
         HStack(alignment: .center) {
             Button {
-                // Already on the recording screen.
-            } label: {
-                VStack(spacing: 5) {
-                    Image(systemName: "record.circle")
-                        .font(.system(size: 26, weight: .medium))
-
-                    Text("Record")
-                        .font(.caption.weight(.semibold))
-                }
-                .foregroundStyle(.red)
-                .frame(width: 82)
-            }
-            .buttonStyle(.plain)
-
-            Spacer()
-
-            cameraControls
-
-            Spacer()
-
-            Button {
                 showRecordings = true
             } label: {
-                VStack(spacing: 5) {
+                VStack(spacing: 3) {
                     Image(systemName: "folder")
-                        .font(.system(size: 26, weight: .medium))
+                        .font(.system(size: 20, weight: .medium))
+                        .frame(width: 38, height: 38)
 
                     Text("Recordings")
-                        .font(.caption.weight(.semibold))
+                        .font(.system(size: 10, weight: .medium))
                 }
                 .foregroundStyle(.white)
-                .frame(width: 100)
+                .frame(width: 72, height: 64)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+
+            Spacer(minLength: 0)
+
+            Button {
+                recordingSession.switchCamera()
+            } label: {
+                Image(systemName: "camera.rotate")
+                    .font(.system(size: 21, weight: .medium))
+                    .foregroundStyle(.white)
+                    .frame(width: 38, height: 38)
+                    .background(.black.opacity(0.4), in: Circle())
+                    .frame(width: 72, height: 64)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Switch camera")
+            .disabled(recordingSession.state != .ready)
+        }
+        .frame(height: 84)
+        .overlay {
+            cameraControls
         }
         .disabled(countdownRemaining != nil)
     }
@@ -710,9 +749,9 @@ struct ContentView: View {
             recordingSession.setZoom(zoom)
         } label: {
             Text(title)
-                .font(.subheadline.weight(.semibold))
+                .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.white)
-                .frame(minWidth: 44, minHeight: 44)
+                .frame(width: 48, height: 32)
                 .background(
                     .white.opacity(
                         abs(recordingSession.currentZoom - zoom) < 0.15
@@ -721,6 +760,7 @@ struct ContentView: View {
                     ),
                     in: Capsule()
                 )
+                .frame(height: 44)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

@@ -27,6 +27,7 @@ enum VoiceCommand: Equatable {
 struct VoiceUtteranceBoundary {
     private var lastSpeechTime: TimeInterval?
     private var noiseFloor: Double?
+    private var lastLevelTime: TimeInterval?
 
     mutating func heardTranscript(at time: TimeInterval) {
         lastSpeechTime = time
@@ -34,8 +35,16 @@ struct VoiceUtteranceBoundary {
 
     mutating func shouldEnd(level: Double, time: TimeInterval) -> Bool {
         guard level.isFinite else { return false }
-        noiseFloor = min(noiseFloor ?? level, level)
-        let threshold = max(0.008, (noiseFloor ?? 0) * 2.5)
+        guard level >= 0 else { return false }
+        let elapsed = max(0, time - (lastLevelTime ?? time))
+        lastLevelTime = time
+        // Follow quieter audio quickly, but rise slowly so speech does not become the noise floor.
+        let previousFloor = noiseFloor ?? min(level, 0.008 / 2.5)
+        let adaptedFloor = level < previousFloor
+            ? level
+            : previousFloor + (level - previousFloor) * (1 - exp(-elapsed / 10))
+        noiseFloor = adaptedFloor
+        let threshold = max(0.008, adaptedFloor * 2.5)
         if level > threshold {
             lastSpeechTime = time
             return false

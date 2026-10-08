@@ -266,6 +266,7 @@ final class RecordingSession: ObservableObject {
         }
 
         isFinishing = true
+        voiceCommands.suspend(reason: "recording finalization")
         setDisplayAwake(false)
         sensorManager.stop()
 

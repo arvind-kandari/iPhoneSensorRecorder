@@ -19,6 +19,42 @@ final class VoiceCommands: ObservableObject {
     private var completionFallback: DispatchWorkItem?
     private var audioBuffersReceived = 0
     private var loggedUnsupportedAudio = false
+    private var audioInterrupted = false
+    private var audioObservers: [NSObjectProtocol] = []
+
+    init() {
+        for name in [AVAudioSession.interruptionNotification, AVAudioSession.routeChangeNotification] {
+            audioObservers.append(NotificationCenter.default.addObserver(
+                forName: name, object: AVAudioSession.sharedInstance(), queue: nil
+            ) { [weak self] notification in
+                let value = (notification.userInfo?[name == AVAudioSession.interruptionNotification
+                    ? AVAudioSessionInterruptionTypeKey : AVAudioSessionRouteChangeReasonKey] as? NSNumber)?.uintValue
+                self?.queue.async { [weak self] in
+                    self?.handleAudioEvent(name: name, value: value)
+                }
+            })
+        }
+    }
+
+    private func handleAudioEvent(name: Notification.Name, value: UInt?) {
+        if name == AVAudioSession.interruptionNotification {
+            VoiceCommandDebug.log("Audio interruption: type=\(String(describing: value)), listening=\(enabled)")
+            guard let value, let type = AVAudioSession.InterruptionType(rawValue: value) else { return }
+            audioInterrupted = type == .began
+            if audioInterrupted {
+                if request != nil { stopRequest() }
+                if enabled { report("Speech recognition interrupted.") }
+            } else if enabled, recognizer != nil {
+                scheduleRestart(after: 0.3)
+            }
+        } else {
+            let session = AVAudioSession.sharedInstance()
+            VoiceCommandDebug.log("Audio route change: reason=\(String(describing: value)), inputs=\(session.currentRoute.inputs.map { $0.portType.rawValue }), listening=\(enabled)")
+            // The capture session still owns the microphone and its audio configuration.
+            if request != nil { stopRequest() }
+            if enabled, !audioInterrupted, recognizer != nil { scheduleRestart(after: 0.3) }
+        }
+    }
 
     func setListening(_ listening: Bool) {
         queue.async { [weak self] in
@@ -31,11 +67,13 @@ final class VoiceCommands: ObservableObject {
                 self.report("Off")
                 return
             }
+            self.recognizer = nil
             self.report("Requesting permission…")
             SFSpeechRecognizer.requestAuthorization { [weak self] authorization in
                 guard let self else { return }
                 self.queue.async {
                     guard self.enabled, self.generation == activation else { return }
+                    VoiceCommandDebug.log("Speech permission: \(authorization.rawValue)")
                     guard authorization == .authorized else {
                         self.report("Speech permission denied. Enable it in iPhone Settings.")
                         return
@@ -44,6 +82,7 @@ final class VoiceCommands: ObservableObject {
                         guard let self else { return }
                         self.queue.async {
                             guard self.enabled, self.generation == activation else { return }
+                            VoiceCommandDebug.log("Microphone permission granted: \(granted)")
                             guard granted else {
                                 self.report("Microphone permission denied. Enable it in iPhone Settings.")
                                 return
@@ -91,13 +130,12 @@ final class VoiceCommands: ObservableObject {
         }
     }
 
-    @MainActor
-    func suspend() {
+    func suspend(reason: String = "countdown") {
         queue.sync {
             enabled = false
-            VoiceCommandDebug.log("Recognition suspended before countdown")
+            VoiceCommandDebug.log("Recognition suspended: \(reason)")
             stopRequest()
-            report("Suspended during countdown")
+            report("Suspended during \(reason)")
         }
     }
 
@@ -152,8 +190,9 @@ final class VoiceCommands: ObservableObject {
     }
 
     private func startRequest() {
+        guard enabled, !audioInterrupted, let recognizer else { return }
         stopRequest()
-        guard enabled, let recognizer else { return }
+        VoiceCommandDebug.log("Recognizer availability: available=\(recognizer.isAvailable), onDevice=\(recognizer.supportsOnDeviceRecognition)")
         guard recognizer.supportsOnDeviceRecognition else {
             report("On-device English speech recognition is unavailable on this iPhone.")
             return
@@ -216,8 +255,12 @@ final class VoiceCommands: ObservableObject {
 
     private func scheduleRestart(after seconds: Double) {
         renewal?.cancel()
+        let restartGeneration = generation
+        VoiceCommandDebug.log("Recognition restart scheduled in \(seconds)s; generation=\(restartGeneration)")
         let work = DispatchWorkItem { [weak self] in
-            guard let self, self.enabled else { return }
+            guard let self, self.enabled, !self.audioInterrupted,
+                  self.generation == restartGeneration else { return }
+            VoiceCommandDebug.log("Recognition restarting; generation=\(restartGeneration)")
             self.startRequest()
         }
         renewal = work
@@ -273,6 +316,7 @@ final class VoiceCommands: ObservableObject {
     }
 
     deinit {
+        for observer in audioObservers { NotificationCenter.default.removeObserver(observer) }
         completionFallback?.cancel()
         renewal?.cancel()
         request?.endAudio()

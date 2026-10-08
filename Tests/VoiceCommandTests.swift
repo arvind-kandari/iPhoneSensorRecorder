@@ -34,6 +34,36 @@ enum VoiceCommandTests {
         }
         precondition(VoiceCommand.recognized("Start recording in", isFinal: false, utteranceEnded: true) == nil)
 
+        for seconds in [5, 10] {
+            let partials = ["Start", "Start recording", "Start recording in",
+                            "Start recording in \(seconds)", "Start recording in \(seconds) seconds"]
+            for text in partials {
+                precondition(VoiceCommand.recognized(text, isFinal: false) == nil)
+            }
+            let complete = partials.last!
+            precondition(VoiceCommand.recognized(complete, isFinal: false, utteranceEnded: true) == .start(seconds))
+            precondition(VoiceCommand.recognized(complete, isFinal: true) != .start(0))
+        }
+
+        var changingNoise = VoiceUtteranceBoundary()
+        precondition(!changingNoise.shouldEnd(level: 0, time: 0))
+        // Startup silence must expire even when the later background never returns to zero.
+        for tick in 1...200 {
+            _ = changingNoise.shouldEnd(level: 0.025, time: Double(tick) / 10)
+        }
+        changingNoise.heardTranscript(at: 20)
+        precondition(!changingNoise.shouldEnd(level: 0.12, time: 20.1))
+        precondition(!changingNoise.shouldEnd(level: 0.025, time: 20.5))
+        precondition(changingNoise.shouldEnd(level: 0.025, time: 21.2))
+
+        var continuingSpeech = VoiceUtteranceBoundary()
+        precondition(!continuingSpeech.shouldEnd(level: 0.002, time: 0))
+        for tick in 1...40 {
+            precondition(!continuingSpeech.shouldEnd(level: 0.12, time: Double(tick) / 10))
+        }
+        precondition(!continuingSpeech.shouldEnd(level: .nan, time: 4.1))
+        precondition(!continuingSpeech.shouldEnd(level: -1, time: 4.2))
+
         var noisyBoundary = VoiceUtteranceBoundary()
         precondition(!noisyBoundary.shouldEnd(level: 0.025, time: 0))
         noisyBoundary.heardTranscript(at: 1)

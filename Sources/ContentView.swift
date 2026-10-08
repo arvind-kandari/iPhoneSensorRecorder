@@ -101,6 +101,7 @@ struct ContentView: View {
             }
             .onChange(of: voiceCommandsEnabled) { updateVoiceListening() }
             .onChange(of: countdownRemaining) { updateVoiceListening() }
+            .onChange(of: recordingSession.isFinishing) { updateVoiceListening() }
             .onReceive(
                 NotificationCenter.default.publisher(
                     for: UIApplication.willEnterForegroundNotification
@@ -688,7 +689,7 @@ struct ContentView: View {
     @MainActor
     private func updateVoiceListening() {
         recordingSession.voiceCommands.setListening(
-            voiceCommandsEnabled && cameraScreenActive && countdownRemaining == nil
+            voiceCommandsEnabled && cameraScreenActive && countdownRemaining == nil && !recordingSession.isFinishing
         )
     }
 

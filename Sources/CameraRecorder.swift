@@ -301,8 +301,10 @@ final class CameraRecorder: NSObject {
             )
 
             try audioSession.setActive(true)
+            VoiceCommandDebug.log("Audio session activated: category=\(audioSession.category.rawValue), mode=\(audioSession.mode.rawValue), rate=\(audioSession.sampleRate), inputs=\(audioSession.currentRoute.inputs.map { $0.portType.rawValue })")
 
         } catch {
+            VoiceCommandDebug.log("Audio session setup failed: \(error.localizedDescription)")
             print(
                 "Audio session configuration warning: \(error.localizedDescription)"
             )

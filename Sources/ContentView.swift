@@ -1,9 +1,11 @@
 import SwiftUI
 import UIKit
+import AVFoundation
 
 struct ContentView: View {
     @StateObject private var recordingSession = RecordingSession()
     @StateObject private var licenseManager = LicenseManager()
+    @StateObject private var countdownSpeaker = CountdownSpeaker()
 
     @State private var sensorReading = SensorReading(
         recordingTime: 0,
@@ -590,10 +592,25 @@ struct ContentView: View {
         countdownRemaining = countdownSeconds
         countdownTask = Task { @MainActor in
             do {
-                while let remaining = countdownRemaining, remaining > 0 {
-                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                for remaining in stride(from: countdownSeconds, through: 0, by: -1) {
                     try Task.checkCancellation()
-                    countdownRemaining = remaining - 1
+                    countdownRemaining = remaining
+                    let startedAt = Date()
+                    let phrase = remaining == countdownSeconds
+                        ? "Recording starts in \(remaining)"
+                        : "\(remaining)"
+                    guard await countdownSpeaker.speak(phrase) else {
+                        if !Task.isCancelled {
+                            cancelCountdown()
+                        }
+                        return
+                    }
+                    try Task.checkCancellation()
+
+                    if remaining > 0 {
+                        let delay = max(0, 1 - Date().timeIntervalSince(startedAt))
+                        try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                    }
                 }
             } catch {
                 return
@@ -605,8 +622,10 @@ struct ContentView: View {
         }
     }
 
+    @MainActor
     private func cancelCountdown() {
         countdownTask?.cancel()
+        countdownSpeaker.cancel()
         countdownTask = nil
         countdownRemaining = nil
     }
@@ -705,6 +724,63 @@ struct ContentView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Spoken Countdown
+
+private final class CountdownSpeaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
+    private let synthesizer = AVSpeechSynthesizer()
+    private var currentUtterance: AVSpeechUtterance?
+    private var completion: CheckedContinuation<Bool, Never>?
+
+    override init() {
+        super.init()
+        synthesizer.delegate = self
+    }
+
+    @MainActor
+    func speak(_ text: String) async -> Bool {
+        cancel()
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+        currentUtterance = utterance
+        return await withCheckedContinuation { continuation in
+            completion = continuation
+            synthesizer.speak(utterance)
+        }
+    }
+
+    @MainActor
+    func cancel() {
+        let pending = completion
+        completion = nil
+        currentUtterance = nil
+        synthesizer.stopSpeaking(at: .immediate)
+        pending?.resume(returning: false)
+    }
+
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            finish(utterance, completed: true)
+        }
+    }
+
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            finish(utterance, completed: false)
+        }
+    }
+
+    @MainActor
+    private func finish(_ utterance: AVSpeechUtterance, completed: Bool) {
+        guard utterance === currentUtterance else {
+            return
+        }
+        let pending = completion
+        completion = nil
+        currentUtterance = nil
+        pending?.resume(returning: completed)
     }
 }
 

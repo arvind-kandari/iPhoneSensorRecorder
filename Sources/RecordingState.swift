@@ -15,4 +15,9 @@ enum RecordingState: Equatable {
     case finishing
 
     case error(String)
+
+    var canStart: Bool { self == .ready }
+    var canPause: Bool { self == .recording }
+    var canResume: Bool { self == .paused }
+    var canStop: Bool { self == .recording || self == .paused }
 }

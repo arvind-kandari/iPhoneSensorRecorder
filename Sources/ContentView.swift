@@ -6,6 +6,8 @@ struct ContentView: View {
     @StateObject private var recordingSession = RecordingSession()
     @StateObject private var licenseManager = LicenseManager()
     @StateObject private var countdownSpeaker = CountdownSpeaker()
+    @AppStorage("voiceCommandsEnabled") private var voiceCommandsEnabled = false
+    @State private var cameraScreenActive = false
 
     @State private var sensorReading = SensorReading(
         recordingTime: 0,
@@ -71,6 +73,9 @@ struct ContentView: View {
             .tint(.red)
             .preferredColorScheme(.dark)
             .onAppear {
+                cameraScreenActive = true
+                recordingSession.voiceCommands.onCommand = handleVoiceCommand
+                updateVoiceListening()
                 recordingSession.onSensorReading = { reading in
                     DispatchQueue.main.async {
                         sensorReading = reading
@@ -84,11 +89,18 @@ struct ContentView: View {
                     for: UIApplication.willResignActiveNotification
                 )
             ) { _ in
+                cameraScreenActive = false
+                updateVoiceListening()
                 cancelCountdown()
             }
             .onDisappear {
+                cameraScreenActive = false
+                recordingSession.voiceCommands.setListening(false)
+                recordingSession.voiceCommands.onCommand = nil
                 cancelCountdown()
             }
+            .onChange(of: voiceCommandsEnabled) { _ in updateVoiceListening() }
+            .onChange(of: countdownRemaining) { _ in updateVoiceListening() }
             .onReceive(
                 NotificationCenter.default.publisher(
                     for: UIApplication.willEnterForegroundNotification
@@ -96,10 +108,17 @@ struct ContentView: View {
             ) { _ in
                 licenseManager.refreshValidity()
             }
+            .onReceive(
+                NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
+            ) { _ in
+                cameraScreenActive = true
+                updateVoiceListening()
+            }
             .sheet(isPresented: $showSettings) {
                 SettingsView(
                     session: recordingSession,
-                    licenseManager: licenseManager
+                    licenseManager: licenseManager,
+                    voiceCommands: recordingSession.voiceCommands
                 )
             }
             .sheet(isPresented: $showRecordings) {
@@ -613,24 +632,26 @@ struct ContentView: View {
     }
 
     @MainActor
-    private func startWithCountdown() {
+    private func startWithCountdown(seconds: Int? = nil) {
         guard recordingSession.state == .ready, countdownRemaining == nil else {
             return
         }
 
-        guard countdownSeconds > 0 else {
+        let selectedCountdown = seconds ?? countdownSeconds
+        guard selectedCountdown > 0 else {
             recordingSession.start()
             return
         }
 
-        countdownRemaining = countdownSeconds
+        recordingSession.voiceCommands.suspend()
+        countdownRemaining = selectedCountdown
         countdownTask = Task { @MainActor in
             do {
-                for remaining in stride(from: countdownSeconds, through: 0, by: -1) {
+                for remaining in stride(from: selectedCountdown, through: 0, by: -1) {
                     try Task.checkCancellation()
                     countdownRemaining = remaining
                     let startedAt = Date()
-                    let phrase = remaining == countdownSeconds
+                    let phrase = remaining == selectedCountdown
                         ? "Recording starts in \(remaining)"
                         : "\(remaining)"
                     guard await countdownSpeaker.speak(phrase) else {
@@ -662,6 +683,30 @@ struct ContentView: View {
         countdownSpeaker.cancel()
         countdownTask = nil
         countdownRemaining = nil
+    }
+
+    @MainActor
+    private func updateVoiceListening() {
+        recordingSession.voiceCommands.setListening(
+            voiceCommandsEnabled && cameraScreenActive && countdownRemaining == nil
+        )
+    }
+
+    @MainActor
+    private func handleVoiceCommand(_ command: VoiceCommand) {
+        defer { updateVoiceListening() }
+        guard voiceCommandsEnabled, cameraScreenActive, countdownRemaining == nil,
+              !recordingSession.isFinishing else { return }
+        switch command {
+        case .start(let seconds):
+            startWithCountdown(seconds: seconds)
+        case .stop:
+            if recordingSession.isRecording { recordingSession.stop() }
+        case .pause:
+            if recordingSession.isRecording && !recordingSession.isPaused { recordingSession.pause() }
+        case .resume:
+            if recordingSession.isRecording && recordingSession.isPaused { recordingSession.resume() }
+        }
     }
 
     // MARK: - Format
@@ -865,12 +910,20 @@ private struct VideoSettingsView: View {
 private struct SettingsView: View {
     @ObservedObject var session: RecordingSession
     @ObservedObject var licenseManager: LicenseManager
+    @ObservedObject var voiceCommands: VoiceCommands
+    @AppStorage("voiceCommandsEnabled") private var voiceCommandsEnabled = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             List {
                 Section("Recording") {
+                    Toggle("Voice Commands", isOn: $voiceCommandsEnabled)
+                    if voiceCommandsEnabled {
+                        Text(voiceCommands.status)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     NavigationLink {
                         VideoSettingsView(session: session)
                     } label: {

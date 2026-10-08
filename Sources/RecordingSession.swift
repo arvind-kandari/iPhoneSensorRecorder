@@ -7,6 +7,7 @@ final class RecordingSession: ObservableObject {
 
     @Published var isRecording = false
     @Published var isPaused = false
+    @Published private(set) var isFinishing = false
     @Published var elapsedTime: TimeInterval = 0
     @Published var audioEnabled = true
     @Published private(set) var currentZoom = 1.0
@@ -19,6 +20,7 @@ final class RecordingSession: ObservableObject {
     let csvWriter = CSVWriter()
     let videoWriter = VideoWriter()
     let metadataWriter = MetadataWriter()
+    let voiceCommands = VoiceCommands()
 
    // MARK: - Compatibility API used by ContentView
 
@@ -70,6 +72,7 @@ final class RecordingSession: ObservableObject {
     }
 
     var state: RecordingState {
+        if isFinishing { return .finishing }
         if isRecording {
             return isPaused ? .paused : .recording
         }
@@ -101,6 +104,10 @@ final class RecordingSession: ObservableObject {
             }
 
             self.videoWriter.appendAudio(sampleBuffer)
+        }
+
+        cameraRecorder.onMicrophoneSample = { [weak self] sampleBuffer in
+            self?.voiceCommands.append(sampleBuffer)
         }
 
         cameraRecorder.onCameraChanged = { [weak self] isFront, hasTorch, torchIsOn in
@@ -151,7 +158,7 @@ final class RecordingSession: ObservableObject {
 
     func start() {
 
-        guard !isRecording else {
+        guard state.canStart else {
             return
         }
 
@@ -226,7 +233,7 @@ final class RecordingSession: ObservableObject {
 
     func pause() {
 
-        guard isRecording, !isPaused else {
+        guard state.canPause else {
             return
         }
 
@@ -240,7 +247,7 @@ final class RecordingSession: ObservableObject {
 
     func resume() {
 
-        guard isRecording, isPaused else {
+        guard state.canResume else {
             return
         }
 
@@ -254,10 +261,11 @@ final class RecordingSession: ObservableObject {
 
     func stop() {
 
-        guard isRecording else {
+        guard state.canStop else {
             return
         }
 
+        isFinishing = true
         setDisplayAwake(false)
         sensorManager.stop()
 
@@ -286,6 +294,7 @@ final class RecordingSession: ObservableObject {
                     self.isPaused = false
                     self.elapsedTime = 0
                     self.recordingFiles = nil
+                    self.isFinishing = false
                 }
             }
         }

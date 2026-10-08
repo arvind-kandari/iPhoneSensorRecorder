@@ -75,6 +75,7 @@ final class CameraRecorder: NSObject {
 
     var onFrame: ((CMSampleBuffer, TimeInterval) -> Void)?
     var onAudioFrame: ((CMSampleBuffer) -> Void)?
+    var onMicrophoneSample: ((CMSampleBuffer) -> Void)?
 
     var onConfigured: ((Int, Int) -> Void)?
     var onConfigurationFailed: ((String) -> Void)?
@@ -1048,6 +1049,10 @@ extension CameraRecorder:
         didOutput sampleBuffer: CMSampleBuffer,
         from connection: AVCaptureConnection
     ) {
+
+        if output === audioOutput, CMSampleBufferDataIsReady(sampleBuffer) {
+            onMicrophoneSample?(sampleBuffer)
+        }
 
         deliveryLock.lock()
 

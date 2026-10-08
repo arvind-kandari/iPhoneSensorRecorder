@@ -17,7 +17,8 @@ targets:
       properties:
         UILaunchScreen: {}
         NSCameraUsageDescription: "This app uses the camera to record synchronized video."
-        NSMicrophoneUsageDescription: "This app uses the microphone to record synchronized audio."
+        NSMicrophoneUsageDescription: "This app uses the microphone to record synchronized audio and, when enabled, listen for voice commands."
+        NSSpeechRecognitionUsageDescription: "Enable voice commands to control recording using your voice."
         NSMotionUsageDescription: "This app uses motion sensors to record synchronized sensor data."
         CFBundleDisplayName: CapturE
         UIFileSharingEnabled: true

@@ -3,7 +3,6 @@ import UIKit
 import AVFoundation
 
 struct ContentView: View {
-    @Environment(\.dismiss) private var dismiss
     @StateObject private var recordingSession = RecordingSession()
     @StateObject private var licenseManager = LicenseManager()
     @StateObject private var countdownSpeaker = CountdownSpeaker()
@@ -124,8 +123,8 @@ struct ContentView: View {
                     onFocusTap: handleFocusTap
                 )
                 .frame(
-                    maxWidth: .infinity,
-                    maxHeight: .infinity
+                    width: proxy.size.width,
+                    height: proxy.size.height
                 )
                 .clipped()
                 .ignoresSafeArea()
@@ -201,20 +200,9 @@ struct ContentView: View {
 
     private var topControls: some View {
         HStack(spacing: 8) {
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 36, height: 36)
-                    .background(.black.opacity(0.4), in: Circle())
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Close")
-            .disabled(recordingSession.state != .ready || countdownRemaining != nil)
+            Color.clear
+                .frame(width: 44, height: 44)
+                .allowsHitTesting(false)
 
             if recordingSession.hasTorch {
                 Button(action: recordingSession.toggleTorch) {

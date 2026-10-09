@@ -122,7 +122,7 @@ final class VoiceCommands: ObservableObject {
                 let fallback = DispatchWorkItem { [weak self] in
                     guard let self, self.enabled, self.awaitingFinal,
                           self.generation == currentGeneration else { return }
-                    self.completeUtterance(isFinal: false)
+                    self.completeUtterance(isFinal: false, transcript: self.latestTranscript, source: "partial-fallback")
                 }
                 self.completionFallback = fallback
                 self.queue.asyncAfter(deadline: .now() + 0.5, execute: fallback)
@@ -224,16 +224,29 @@ final class VoiceCommands: ObservableObject {
                     if text != self.latestTranscript && !self.awaitingFinal {
                         self.boundary.heardTranscript(at: ProcessInfo.processInfo.systemUptime)
                     }
-                    self.latestTranscript = text
+                    let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+
                     if result.isFinal {
-                        self.completeUtterance(isFinal: true)
+                        let selectedTranscript = trimmedText.isEmpty ? self.latestTranscript : text
+                        let source = trimmedText.isEmpty ? "partial-fallback" : "final"
+
+                        self.latestTranscript = selectedTranscript
+                        self.completeUtterance(
+                            isFinal: true,
+                            transcript: selectedTranscript,
+                            source: source
+                        )
                         return
+                    }
+
+                    if !trimmedText.isEmpty {
+                        self.latestTranscript = text
                     }
                 }
                 if let error {
                     VoiceCommandDebug.log("Recognition error: \(error.localizedDescription)")
                     if self.awaitingFinal {
-                        self.completeUtterance(isFinal: false)
+                        self.completeUtterance(isFinal: false, transcript: self.latestTranscript, source: "partial-fallback")
                         return
                     }
                     self.stopRequest()
@@ -267,8 +280,14 @@ final class VoiceCommands: ObservableObject {
         queue.asyncAfter(deadline: .now() + seconds, execute: work)
     }
 
-    private func completeUtterance(isFinal: Bool) {
-        let command = VoiceCommand.recognized(latestTranscript, isFinal: isFinal, utteranceEnded: awaitingFinal)
+    private func completeUtterance(isFinal: Bool, transcript: String, source: String) {
+        VoiceCommandDebug.log("Utterance selected for parsing: \(transcript); source=\(source)")
+
+        let command = VoiceCommand.recognized(
+            transcript,
+            isFinal: isFinal,
+            utteranceEnded: awaitingFinal
+        )
         VoiceCommandDebug.log("Parsed VoiceCommand: \(String(describing: command)); final=\(isFinal), microphoneEnded=\(awaitingFinal)")
         if command == nil { VoiceCommandDebug.log("Command ignored: utterance does not match one of the six commands") }
         if case .start(let seconds)? = command, seconds > 0 {

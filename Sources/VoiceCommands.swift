@@ -1,4 +1,4 @@
-import AVFoundation
+﻿import AVFoundation
 import Combine
 import Speech
 
@@ -16,6 +16,7 @@ final class VoiceCommands: ObservableObject {
     private var boundary = VoiceUtteranceBoundary()
     private var awaitingFinal = false
     private var latestTranscript = ""
+    private var immediateCommandWorkItem: DispatchWorkItem?
     private var completionFallback: DispatchWorkItem?
     private var audioBuffersReceived = 0
     private var loggedUnsupportedAudio = false
@@ -68,7 +69,7 @@ final class VoiceCommands: ObservableObject {
                 return
             }
             self.recognizer = nil
-            self.report("Requesting permission…")
+            self.report("Requesting permissionâ€¦")
             SFSpeechRecognizer.requestAuthorization { [weak self] authorization in
                 guard let self else { return }
                 self.queue.async {
@@ -198,7 +199,7 @@ final class VoiceCommands: ObservableObject {
             return
         }
         guard recognizer.isAvailable else {
-            report("Speech recognition is unavailable. Retrying…")
+            report("Speech recognition is unavailable. Retryingâ€¦")
             scheduleRestart(after: 5)
             return
         }
@@ -227,6 +228,9 @@ final class VoiceCommands: ObservableObject {
                     let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
 
                     if result.isFinal {
+                        self.immediateCommandWorkItem?.cancel()
+                        self.immediateCommandWorkItem = nil
+
                         let selectedTranscript = trimmedText.isEmpty ? self.latestTranscript : text
                         let source = trimmedText.isEmpty ? "partial-fallback" : "final"
 
@@ -241,6 +245,59 @@ final class VoiceCommands: ObservableObject {
 
                     if !trimmedText.isEmpty {
                         self.latestTranscript = text
+
+                        self.immediateCommandWorkItem?.cancel()
+                        self.immediateCommandWorkItem = nil
+
+                        if let partialCommand = VoiceCommand.parse(trimmedText) {
+                            let isImmediate: Bool
+
+                            switch partialCommand {
+                            case .start(let seconds):
+                                isImmediate = seconds == 0
+                            case .stop, .pause, .resume:
+                                isImmediate = true
+                            }
+
+                            if isImmediate {
+                                let currentGeneration = self.generation
+                                let expectedTranscript = trimmedText
+
+                                let work = DispatchWorkItem { [weak self] in
+                                    guard let self,
+                                          self.enabled,
+                                          !self.awaitingFinal,
+                                          self.generation == currentGeneration else {
+                                        return
+                                    }
+
+                                    let currentTranscript = self.latestTranscript
+                                        .trimmingCharacters(in: .whitespacesAndNewlines)
+
+                                    guard currentTranscript == expectedTranscript,
+                                          VoiceCommand.parse(currentTranscript) == partialCommand else {
+                                        return
+                                    }
+
+                                    VoiceCommandDebug.log(
+                                        "Immediate command confirmed from partial transcript: \(currentTranscript)"
+                                    )
+
+                                    self.completeUtterance(
+                                        isFinal: true,
+                                        transcript: currentTranscript,
+                                        source: "partial-immediate"
+                                    )
+                                }
+
+                                self.immediateCommandWorkItem = work
+
+                                self.queue.asyncAfter(
+                                    deadline: .now() + 0.35,
+                                    execute: work
+                                )
+                            }
+                        }
                     }
                 }
                 if let error {
@@ -319,6 +376,8 @@ final class VoiceCommands: ObservableObject {
         renewal = nil
         completionFallback?.cancel()
         completionFallback = nil
+        immediateCommandWorkItem?.cancel()
+        immediateCommandWorkItem = nil
         request?.endAudio()
         task?.cancel()
         task = nil
@@ -342,3 +401,4 @@ final class VoiceCommands: ObservableObject {
         task?.cancel()
     }
 }
+
